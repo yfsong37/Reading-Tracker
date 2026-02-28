@@ -516,40 +516,38 @@ saveActive();
 renderShelf();
 checkA2HS();
 
-// ── PERSIST (localStorage) ──
-function saveActive(){ try{localStorage.setItem('rp_active',JSON.stringify(activeSessions));}catch(e){} }
+// ── PERSIST (localStorage; Drive syncs on open/close) ──
+function saveActive(){
+  try{localStorage.setItem('rp_active',JSON.stringify(activeSessions));}catch(e){}
+}
 function loadActive(){ try{return JSON.parse(localStorage.getItem('rp_active')||'[]');}catch(e){return[];} }
-function saveHistory(h){ try{localStorage.setItem('rp_history',JSON.stringify(h.slice(0,200)));}catch(e){} }
+function saveHistory(h){
+  try{localStorage.setItem('rp_history',JSON.stringify(h.slice(0,200)));}catch(e){}
+}
 function loadHistory(){ try{return JSON.parse(localStorage.getItem('rp_history')||'[]');}catch(e){return[];} }
 
-// ── GOOGLE DRIVE PICKER SYNC ──
-// Uses gapi (for Picker UI) + Google Identity Services token client (for OAuth).
-// No verified-app wall: the user picks their own file via the Picker.
-// Credentials saved in localStorage — entered once via ⚙ Setup panel.
+// ── GOOGLE DRIVE SYNC ──
+// • Auto-loads from Drive on page open (when credentials stored)
+// • Auto-saves to Drive on page close / tab close (beforeunload)
+// • Manual 💾 Save and 📂 Load buttons always available
+// • Credentials stored in localStorage — entered once via ⚙ Setup
 
 const DRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const RPDATA_NAME  = 'readpace_data.json';
 
-let driveApiKey   = '';
-let driveClientId = '';
-let driveToken    = null;
-let driveTokenExp = 0;
-let driveFileId   = null;
+let driveApiKey    = '';
+let driveClientId  = '';
+let driveToken     = null;
+let driveTokenExp  = 0;
+let driveFileId    = null;
+let driveConnected = false;
+let gapiReady      = false;
+let gisReady       = false;
 
-// Readiness flags — both gapi AND GIS must be loaded before we can proceed
-let gapiReady = false;   // set by gapiOnLoad() callback on the script tag
-let gisReady  = false;   // set by gisOnLoad() callback on the script tag
+function gapiOnLoad(){ gapi.load('picker', () => { gapiReady = true; maybeAutoInit(); }); }
+function gisOnLoad() { gisReady = true; maybeAutoInit(); }
 
-// Called by gapi script onload attribute
-function gapiOnLoad(){
-  gapi.load('picker', () => { gapiReady = true; maybeAutoInit(); });
-}
-// Called by GIS script onload attribute
-function gisOnLoad(){
-  gisReady = true; maybeAutoInit();
-}
-
-// Load saved config immediately, but only call driveConnect once both libs are ready
+// Load stored credentials on boot
 (function loadStoredConfig(){
   try {
     driveApiKey   = localStorage.getItem('rp_apikey')   || '';
@@ -559,191 +557,182 @@ function gisOnLoad(){
 })();
 
 function maybeAutoInit(){
-  // Wait for both libraries AND for credentials to exist
-  if(gapiReady && gisReady && driveApiKey && driveClientId) driveConnect();
+  if(gapiReady && gisReady && driveApiKey && driveClientId) driveAutoLoad();
 }
 
-// ── User hits "Save Config & Connect" ──
+// ── AUTO-LOAD on page open ──
+function driveAutoLoad(){
+  if(!driveFileId){ driveConnect(); return; }   // no known file yet — just enable buttons
+  setSyncStatus('info', 'Loading from Google Drive…');
+  ensureToken(() => {
+    fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
+      headers:{ Authorization:'Bearer '+driveToken }
+    })
+    .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(d => {
+      if(d.active   && Array.isArray(d.active))  { activeSessions=d.active; activeSessions.forEach(s=>{s.status='paused';}); try{localStorage.setItem('rp_active',JSON.stringify(activeSessions));}catch(e){} }
+      if(d.history  && Array.isArray(d.history)) { try{localStorage.setItem('rp_history',JSON.stringify(d.history.slice(0,200)));}catch(e){} }
+      renderShelf(); try{ renderHistory(); }catch(e){}
+      driveConnect();
+      setSyncStatus('ok', '✓ Loaded from Drive · '+new Date().toLocaleTimeString());
+    })
+    .catch(() => { driveConnect(); });   // silently fall back if file missing / token expired
+  }, /*silent*/true);
+}
+
+// ── AUTO-SAVE on page close ──
+window.addEventListener('beforeunload', () => {
+  if(!driveConnected || !driveToken || Date.now() >= driveTokenExp) return;
+  // Use sendBeacon for a fire-and-forget upload that survives page unload
+  const body = JSON.stringify({ active:activeSessions, history:loadHistory(), savedAt:new Date().toISOString() });
+  if(driveFileId){
+    navigator.sendBeacon(
+      `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,
+      new Blob([body], { type:'application/json' })
+      // Note: sendBeacon can't set Authorization header — fallback below handles auth
+    );
+  }
+  // sendBeacon doesn't support custom headers, so we also attempt a synchronous
+  // keepalive fetch which does — browsers will let this complete even as page closes.
+  try {
+    const url = driveFileId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`
+      : null;
+    if(url) fetch(url, { method:'PATCH', keepalive:true, headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' }, body });
+  } catch(e){}
+});
+
+// ── Mark connected, enable buttons ──
+function driveConnect(){
+  driveConnected = true;
+  document.getElementById('btn-drive-save').disabled = false;
+  document.getElementById('btn-drive-load').disabled = false;
+  if(!document.getElementById('sync-label').classList.contains('ok'))
+    setSyncStatus('ok', 'Google Drive connected — saves automatically when you close the page.');
+}
+
+// ── saveConfig: user hits "Save Config & Connect" ──
 function saveConfig(){
   driveApiKey   = (document.getElementById('cfg-apikey').value   || '').trim();
   driveClientId = (document.getElementById('cfg-clientid').value || '').trim();
-  if(!driveApiKey || !driveClientId){
-    setSyncStatus('err', 'Enter both the API key and Client ID.'); return;
-  }
-  try {
-    localStorage.setItem('rp_apikey',   driveApiKey);
-    localStorage.setItem('rp_clientid', driveClientId);
-  } catch(e){}
+  if(!driveApiKey || !driveClientId){ setSyncStatus('err','Enter both the API key and Client ID.'); return; }
+  try{ localStorage.setItem('rp_apikey', driveApiKey); localStorage.setItem('rp_clientid', driveClientId); }catch(e){}
   document.getElementById('sync-setup').classList.remove('show');
   if(!gapiReady || !gisReady){
-    setSyncStatus('info', 'Google libraries loading… please wait a moment then click Save or Load.');
-    // Poll until ready (libraries may still be fetching)
-    const poll = setInterval(() => {
-      if(gapiReady && gisReady){ clearInterval(poll); driveConnect(); }
-    }, 300);
+    setSyncStatus('info','Google libraries loading…');
+    const poll = setInterval(() => { if(gapiReady && gisReady){ clearInterval(poll); driveAutoLoad(); } }, 300);
     return;
   }
-  driveConnect();
+  driveAutoLoad();
 }
 
 function toggleSetup(){
   const el = document.getElementById('sync-setup');
   el.classList.toggle('show');
-  if(el.classList.contains('show')){
-    document.getElementById('cfg-apikey').value   = driveApiKey;
-    document.getElementById('cfg-clientid').value = driveClientId;
-  }
+  if(el.classList.contains('show')){ document.getElementById('cfg-apikey').value=driveApiKey; document.getElementById('cfg-clientid').value=driveClientId; }
 }
 
-// ── Establish that we have credentials and gapi is primed ──
-function driveConnect(){
-  // gapi picker is already loaded; nothing else to initialise.
-  // Buttons become enabled — token is fetched lazily on first use.
-  setSyncStatus('ok', 'Google Drive ready — click 💾 Save or 📂 Load.');
-  document.getElementById('btn-drive-save').disabled = false;
-  document.getElementById('btn-drive-load').disabled = false;
-  document.getElementById('btn-drive-setup').style.color = 'var(--muted)';
-}
-
-// ── Get / refresh an access token via GIS token client ──
-function ensureToken(cb){
+// ── ensureToken: silent on auto-load, prompts on manual actions ──
+function ensureToken(cb, silent){
   if(driveToken && Date.now() < driveTokenExp){ cb(); return; }
-  setSyncStatus('info', 'Signing in to Google…');
   try {
     const client = google.accounts.oauth2.initTokenClient({
       client_id: driveClientId,
       scope: DRIVE_SCOPES,
+      prompt: silent ? 'none' : '',
       callback: resp => {
         if(resp.error){
-          setSyncStatus('err', 'Sign-in failed: ' + resp.error);
-          disableDriveBtns(false); return;
+          if(silent){ cb(); return; }
+          setSyncStatus('err','Sign-in failed: '+resp.error); disableDriveBtns(false); return;
         }
         driveToken    = resp.access_token;
-        driveTokenExp = Date.now() + ((resp.expires_in || 3600) - 60) * 1000;
+        driveTokenExp = Date.now() + ((resp.expires_in||3600)-60)*1000;
         cb();
       }
     });
-    client.requestAccessToken();
+    client.requestAccessToken({ prompt: silent ? 'none' : '' });
   } catch(e){
-    setSyncStatus('err', 'GIS error: ' + e.message);
-    disableDriveBtns(false);
+    if(silent){ cb(); } else { setSyncStatus('err','GIS error: '+e.message); disableDriveBtns(false); }
   }
 }
 
-// ── SAVE ──
+// ── Core upload (creates file if none exists yet) ──
+async function driveUpload(body){
+  if(driveFileId){
+    const r = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,
+      { method:'PATCH', headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' }, body });
+    if(!r.ok){ const e=await r.json(); throw new Error(e.error?.message||r.status); }
+  } else {
+    const mr = await fetch('https://www.googleapis.com/drive/v3/files',
+      { method:'POST', headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' },
+        body: JSON.stringify({ name:RPDATA_NAME, mimeType:'application/json' }) });
+    if(!mr.ok){ const e=await mr.json(); throw new Error(e.error?.message||mr.status); }
+    driveFileId = (await mr.json()).id;
+    try{ localStorage.setItem('rp_fileid', driveFileId); }catch(e){}
+    const ur = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,
+      { method:'PATCH', headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' }, body });
+    if(!ur.ok){ const e=await ur.json(); throw new Error(e.error?.message||ur.status); }
+  }
+}
+
+// ── MANUAL SAVE ──
 async function driveSave(){
-  if(!driveApiKey){ setSyncStatus('err', 'Complete ⚙ Setup first.'); return; }
+  if(!driveApiKey){ setSyncStatus('err','Complete ⚙ Setup first.'); return; }
   disableDriveBtns(true);
   ensureToken(async () => {
-    setSyncStatus('info', 'Saving to Google Drive…');
+    setSyncStatus('info','Saving to Google Drive…');
     try {
-      const body = JSON.stringify({
-        active: activeSessions,
-        history: loadHistory(),
-        savedAt: new Date().toISOString()
-      }, null, 2);
-
-      if(driveFileId){
-        const r = await fetch(
-          `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,
-          { method:'PATCH', headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' }, body }
-        );
-        if(!r.ok){ const e=await r.json(); throw new Error(e.error?.message||r.status); }
-      } else {
-        // Create metadata first, then upload content
-        const mr = await fetch('https://www.googleapis.com/drive/v3/files', {
-          method:'POST',
-          headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' },
-          body: JSON.stringify({ name: RPDATA_NAME, mimeType:'application/json' })
-        });
-        if(!mr.ok){ const e=await mr.json(); throw new Error(e.error?.message||mr.status); }
-        const meta = await mr.json();
-        driveFileId = meta.id;
-        try{ localStorage.setItem('rp_fileid', driveFileId); }catch(e){}
-        const ur = await fetch(
-          `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,
-          { method:'PATCH', headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' }, body }
-        );
-        if(!ur.ok){ const e=await ur.json(); throw new Error(e.error?.message||ur.status); }
-      }
-      setSyncStatus('ok', '✓ Saved to Google Drive · ' + new Date().toLocaleTimeString());
-    } catch(e){
-      setSyncStatus('err', 'Save failed: ' + e.message);
-    }
+      await driveUpload(JSON.stringify({ active:activeSessions, history:loadHistory(), savedAt:new Date().toISOString() }, null, 2));
+      setSyncStatus('ok','✓ Saved · '+new Date().toLocaleTimeString());
+    } catch(e){ setSyncStatus('err','Save failed: '+e.message); }
     disableDriveBtns(false);
   });
 }
 
-// ── LOAD via Picker ──
+// ── MANUAL LOAD (Picker) ──
 function driveLoad(){
-  if(!driveApiKey){ setSyncStatus('err', 'Complete ⚙ Setup first.'); return; }
+  if(!driveApiKey){ setSyncStatus('err','Complete ⚙ Setup first.'); return; }
   disableDriveBtns(true);
   ensureToken(() => {
     try {
-      const picker = new google.picker.PickerBuilder()
-        .addView(
-          new google.picker.DocsView(google.picker.ViewId.DOCS)
-            .setMimeTypes('application/json')
-            .setQuery('readpace')
-        )
-        .setOAuthToken(driveToken)
-        .setDeveloperKey(driveApiKey)
-        .setCallback(pickerCallback)
-        .setTitle('Choose your ReadPace data file')
-        .build();
-      picker.setVisible(true);
-    } catch(e){
-      setSyncStatus('err', 'Picker error: ' + e.message);
-      disableDriveBtns(false);
-    }
+      new google.picker.PickerBuilder()
+        .addView(new google.picker.DocsView(google.picker.ViewId.DOCS).setMimeTypes('application/json').setQuery('readpace'))
+        .setOAuthToken(driveToken).setDeveloperKey(driveApiKey)
+        .setCallback(pickerCallback).setTitle('Choose your ReadPace data file')
+        .build().setVisible(true);
+    } catch(e){ setSyncStatus('err','Picker error: '+e.message); disableDriveBtns(false); }
   });
 }
 
 function pickerCallback(data){
-  if(data.action === google.picker.Action.CANCEL){
-    disableDriveBtns(false); return;
-  }
+  if(data.action === google.picker.Action.CANCEL){ disableDriveBtns(false); return; }
   if(data.action !== google.picker.Action.PICKED) return;
-  const file = data.docs[0];
-  driveFileId = file.id;
+  driveFileId = data.docs[0].id;
   try{ localStorage.setItem('rp_fileid', driveFileId); }catch(e){}
-  setSyncStatus('info', 'Loading from Google Drive…');
-  fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
-    headers:{ Authorization:'Bearer '+driveToken }
-  })
-  .then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+  setSyncStatus('info','Loading from Google Drive…');
+  fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, { headers:{ Authorization:'Bearer '+driveToken } })
+  .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(d => {
-    if(d.active && Array.isArray(d.active)){
-      activeSessions = d.active;
-      activeSessions.forEach(s => { s.status = 'paused'; });
-      saveActive();
-    }
-    if(d.history && Array.isArray(d.history)) saveHistory(d.history);
-    renderShelf();
-    try{ renderHistory(); }catch(e){}
-    setSyncStatus('ok', '✓ Loaded from Google Drive · ' + new Date().toLocaleTimeString());
+    if(d.active  && Array.isArray(d.active))  { activeSessions=d.active; activeSessions.forEach(s=>{s.status='paused';}); try{localStorage.setItem('rp_active',JSON.stringify(activeSessions));}catch(e){} }
+    if(d.history && Array.isArray(d.history)) { try{localStorage.setItem('rp_history',JSON.stringify(d.history.slice(0,200)));}catch(e){} }
+    renderShelf(); try{ renderHistory(); }catch(e){}
+    setSyncStatus('ok','✓ Loaded from Drive · '+new Date().toLocaleTimeString());
   })
-  .catch(e => setSyncStatus('err', 'Load failed: ' + e.message))
+  .catch(e => setSyncStatus('err','Load failed: '+e.message))
   .finally(() => disableDriveBtns(false));
 }
 
 // ── UI helpers ──
 function setSyncStatus(type, msg){
-  const lbl  = document.getElementById('sync-label');
-  const icon = document.getElementById('sync-icon');
-  const icons = { ok:'✅', err:'⚠️', info:'🔄' };
-  icon.textContent = icons[type] || '☁️';
-  lbl.className = 'sync-label' + (type==='ok' ? ' ok' : type==='err' ? ' err' : '');
-  if(msg) lbl.textContent = msg;
+  const lbl=document.getElementById('sync-label'), icon=document.getElementById('sync-icon');
+  icon.textContent = type==='ok'?'✅':type==='err'?'⚠️':'🔄';
+  lbl.className='sync-label'+(type==='ok'?' ok':type==='err'?' err':'');
+  if(msg) lbl.textContent=msg;
 }
-function disableDriveBtns(on){
-  document.getElementById('btn-drive-save').disabled = on;
-  document.getElementById('btn-drive-load').disabled = on;
-}
-// Keep old name used by summary/history code paths
-function setSyncLabel(msg, ok){
-  setSyncStatus(ok ? 'ok' : 'err', msg);
-}
+function disableDriveBtns(on){ document.getElementById('btn-drive-save').disabled=on; document.getElementById('btn-drive-load').disabled=on; }
+function setSyncLabel(msg,ok){ setSyncStatus(ok?'ok':'err',msg); }
+
+
 
 
 // ── FILE INPUT ──
