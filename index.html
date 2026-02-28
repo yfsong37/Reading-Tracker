@@ -489,24 +489,6 @@ let lastTick       = null;
 let lapTimeOpt     = 'timer';
 let editLapIdx     = null;
 
-// ── BOOT ──
-activeSessions = loadActive();
-activeSessions.forEach(s => { s.status = 'paused'; });
-saveActive();
-renderShelf();
-checkA2HS();
-// allow autosave after initial boot paint
-setTimeout(() => { suppressDirty = false; }, 0);
-
-// save when backgrounding/closing (mobile Safari kills tabs aggressively)
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden && driveDirty && gdriveToken) gdriveSaveNow(true);
-});
-window.addEventListener('pagehide', () => {
-  if (driveDirty && gdriveToken) gdriveSaveNow(true);
-});
-
-// ── PERSIST (localStorage as fast cache; GDrive as source of truth) ──
 // ── PERSIST (localStorage as fast cache; GDrive as source of truth) ──
 let suppressDirty = true;                 // prevents autosave during boot/load
 let driveDirty = false;
@@ -547,6 +529,24 @@ function saveHistory(h){
 function loadHistory(){
   try { return JSON.parse(localStorage.getItem('rp_history') || '[]'); } catch(e){ return []; }
 }
+
+// ── BOOT ──
+activeSessions = loadActive();
+activeSessions.forEach(s => { s.status = 'paused'; });
+saveActive();
+renderShelf();
+checkA2HS();
+// allow autosave after initial boot paint
+setTimeout(() => { suppressDirty = false; }, 0);
+
+// save when backgrounding/closing (mobile Safari kills tabs aggressively)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && driveDirty && gdriveToken) gdriveSaveNow(true);
+});
+window.addEventListener('pagehide', () => {
+  if (driveDirty && gdriveToken) gdriveSaveNow(true);
+});
+
 
 // ── GOOGLE DRIVE INTEGRATION ──
 // Replace YOUR_CLIENT_ID below with your OAuth 2.0 client ID from Google Cloud Console.
