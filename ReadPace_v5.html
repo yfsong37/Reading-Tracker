@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ReadPace">
+<title>ReadPace</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=JetBrains+Mono:wght@400;600&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0a08;--surface:#141210;--surface2:#1c1914;--border:#2a2420;--gold:#e2c97e;--gold-dim:#a0855a;--cream:#f0ead6;--muted:#7a6e60;--red:#f87171;--green:#4ade80;--blue:#60a5fa;--safe-top:env(safe-area-inset-top,0px);--safe-bot:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:'Lato',sans-serif;color:var(--cream);overscroll-behavior:none}
+.screen{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding-top:calc(var(--safe-top) + 12px);padding-bottom:calc(var(--safe-bot) + 72px);opacity:0;pointer-events:none;transition:opacity .25s ease}
+.screen.active{opacity:1;pointer-events:all}
+.inner{max-width:640px;margin:0 auto;padding:16px 18px 20px}
+.tab-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;padding-bottom:var(--safe-bot);z-index:100}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 8px 8px;gap:3px;cursor:pointer;border:none;background:none;color:var(--muted);transition:color .15s;font-family:'Lato',sans-serif}
+.tab.active{color:var(--gold)}
+.tab-icon{font-size:21px}.tab-label{font-size:11px;font-weight:700;letter-spacing:.4px}
+.screen-title{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--cream)}
+.section-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:10px;display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px}
+.btn{border:none;border-radius:14px;padding:16px 20px;font-size:16px;font-weight:700;cursor:pointer;font-family:'Lato',sans-serif;transition:opacity .15s,transform .1s}
+.btn:active{transform:scale(.97);opacity:.85}
+.btn-primary{background:var(--gold);color:var(--bg)}
+.btn-secondary{background:transparent;color:var(--gold);border:1.5px solid var(--gold)}
+.btn-ghost{background:var(--surface2);color:var(--cream);border:1px solid var(--border)}
+.btn-row{display:flex;gap:10px}
+.btn-row .btn{flex:1}
+/* HOME */
+.app-header{text-align:center;margin-bottom:28px;padding-top:8px}
+.app-logo{font-size:48px;margin-bottom:8px;display:block}
+.app-title{font-family:'Playfair Display',serif;font-size:36px;font-weight:900;color:var(--cream);letter-spacing:-1px;line-height:1}
+.app-subtitle{color:var(--muted);font-size:14px;margin-top:6px;font-weight:300}
+.a2hs-banner{background:var(--surface2);border:1px solid var(--gold-dim);border-radius:14px;padding:13px 15px;margin-bottom:20px;display:flex;align-items:center;gap:10px}
+.a2hs-banner.hidden{display:none}
+.a2hs-text{font-size:13px;color:var(--cream);line-height:1.4;flex:1}
+.a2hs-text strong{color:var(--gold)}
+.a2hs-close{background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer;padding:4px}
+.import-area{background:var(--surface);border:2px dashed var(--border);border-radius:18px;padding:40px 24px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:20px}
+.import-area:active,.import-area.drag-over{border-color:var(--gold);background:var(--surface2)}
+.import-icon{font-size:40px;margin-bottom:12px;color:var(--gold)}
+.import-main{font-family:'Playfair Display',serif;font-size:18px;color:var(--cream);margin-bottom:5px}
+.import-sub{color:var(--muted);font-size:13px}
+#file-input{display:none}
+.shelf-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.shelf-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+.shelf-add{background:none;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:'Lato',sans-serif}
+.book-shelf-item{background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:10px;overflow:hidden;display:flex;cursor:pointer;transition:border-color .2s}
+.book-shelf-item:active{border-color:var(--gold-dim)}
+.book-shelf-item.is-running{border-color:var(--gold-dim)}
+.bsi-spine{width:6px;flex-shrink:0}
+.bsi-body{padding:14px;flex:1;min-width:0}
+.bsi-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
+.bsi-title{font-family:'Playfair Display',serif;font-size:16px;color:var(--cream);font-weight:700;line-height:1.2;flex:1}
+.bsi-status{font-size:11px;padding:3px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0}
+.bsi-status.running{background:rgba(74,222,128,.12);color:var(--green)}
+.bsi-status.paused{background:rgba(122,110,96,.12);color:var(--muted)}
+.bsi-meta{display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.bsi-wpm{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:13px;font-weight:600}
+.bsi-actions{display:flex;flex-direction:column;justify-content:center;padding:8px 12px 8px 0;gap:6px}
+.bsi-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;white-space:nowrap;font-family:'Lato',sans-serif}
+.bsi-btn.open{color:var(--gold);border-color:var(--gold-dim)}
+.bsi-btn.del{color:var(--red)}
+.steps-list{background:var(--surface);border-radius:14px;overflow:hidden;border:1px solid var(--border)}
+.step-item{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.step-item:last-child{border-bottom:none}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--surface2);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;border:1px solid var(--border);margin-top:1px}
+.step-text{font-size:14px;color:var(--cream);line-height:1.5}
+/* READING */
+.reading-topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.topbar-book{font-size:13px;color:var(--muted);max-width:55%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.end-btn{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:9px 14px;border-radius:10px;font-size:13px;cursor:pointer;font-family:'Lato',sans-serif}
+.wpm-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.wpm-box{background:var(--surface);border-radius:14px;padding:18px 14px;text-align:center;border:1px solid var(--border)}
+.wpm-box.accent{background:#1a1608;border-color:#4a3e20}
+.wpm-value{font-family:'JetBrains Mono',monospace;font-size:44px;font-weight:600;line-height:1;color:var(--cream)}
+.wpm-box.accent .wpm-value{color:var(--gold)}
+.wpm-label{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1.8px;text-transform:uppercase;margin-top:6px}
+.chapter-card{padding:16px;margin-bottom:12px}
+.ch-progress-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;display:block}
+.progress-track{height:3px;background:var(--border);border-radius:2px;margin-bottom:12px}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold));border-radius:2px;transition:width .5s ease}
+.current-ch-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--cream);margin-bottom:6px;line-height:1.3}
+.chapter-detail{font-size:13px;color:var(--muted)}
+.timer-block{padding:22px 16px;margin-bottom:12px;text-align:center}
+.timer-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:8px}
+.timer-value{font-family:'JetBrains Mono',monospace;font-size:58px;font-weight:600;color:var(--gold);letter-spacing:-2px;line-height:1;transition:color .3s}
+.timer-value.paused{color:var(--muted)}
+.timer-session{font-size:13px;color:var(--muted);margin-top:8px;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;justify-content:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;transition:background .3s}
+.dot.paused{background:var(--muted)}
+.estimate-bar{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--cream);display:none;align-items:center;gap:8px}
+.estimate-bar.show{display:flex}
+.controls{display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;margin-bottom:22px}
+.pause-btn{background:var(--surface);border:1px solid var(--border);color:var(--cream);border-radius:14px;padding:19px 10px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Lato',sans-serif;transition:all .15s}
+.pause-btn:active{opacity:.75;transform:scale(.97)}
+.lap-btn{background:var(--gold);color:var(--bg);border:none;border-radius:14px;padding:19px 10px;font-size:18px;font-weight:700;cursor:pointer;font-family:'Lato',sans-serif;transition:all .15s;box-shadow:0 4px 18px rgba(226,201,126,.2)}
+.skip-btn{background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:14px;padding:19px 10px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Lato',sans-serif;transition:all .15s}
+.skip-btn:active{opacity:.75;transform:scale(.97)}
+.row-skipped{opacity:.45;font-style:italic}
+.skip-badge{font-size:10px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:2px 6px;margin-left:4px;font-style:normal;vertical-align:middle}
+.lap-btn:active{opacity:.85;transform:scale(.97)}
+.laps-section{margin-top:4px}
+.table-card{background:var(--surface);border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+.table-header{display:grid;grid-template-columns:1fr 64px 58px;gap:8px;padding:9px 14px;background:var(--surface2);font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
+.table-row{display:grid;grid-template-columns:1fr 64px 58px;gap:8px;padding:12px 14px;border-top:1px solid var(--border);align-items:center;cursor:pointer;transition:background .15s}
+.table-row:active{background:var(--surface2)}
+.row-name{font-size:13px;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-time{font-size:13px;color:var(--muted);font-family:'JetBrains Mono',monospace;text-align:right}
+.row-wpm{font-size:13px;font-weight:700;color:var(--gold);font-family:'JetBrains Mono',monospace;text-align:right}
+/* SUMMARY */
+.summary-inner{max-width:640px;margin:0 auto;padding:24px 18px 20px}
+.trophy{font-size:52px;text-align:center;margin-bottom:10px}
+.summary-title{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;text-align:center;color:var(--cream);margin-bottom:5px}
+.summary-book{color:var(--muted);font-size:14px;text-align:center;margin-bottom:24px}
+.stats-trio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 8px;text-align:center}
+.stat-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:600;color:var(--gold);line-height:1;margin-bottom:6px}
+.stat-lbl{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1.8px;text-transform:uppercase}
+.highlights{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.highlight-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px}
+.hl-label{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:5px}
+.hl-chapter{font-size:13px;color:var(--cream);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hl-wpm{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:600}
+/* HISTORY */
+.history-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.clear-btn{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:6px}
+.empty-state{text-align:center;padding:56px 20px;color:var(--muted)}
+.empty-icon{font-size:44px;margin-bottom:12px;opacity:.45}
+.empty-text{font-size:15px;margin-bottom:5px;color:var(--cream);opacity:.45}
+.empty-sub{font-size:13px;opacity:.35}
+.session-item{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color .2s}
+.session-item:active{border-color:var(--gold-dim)}
+.si-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.si-book{font-family:'Playfair Display',serif;font-size:16px;color:var(--cream);font-weight:700;line-height:1.2;max-width:65%}
+.si-wpm{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:600;color:var(--gold)}
+.si-bottom{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+/* MODALS */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity .25s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal-sheet{background:var(--surface);border-radius:22px 22px 0 0;padding:22px 20px calc(var(--safe-bot) + 22px);width:100%;max-height:88vh;overflow-y:auto;transform:translateY(100%);transition:transform .32s cubic-bezier(.32,1,.23,1)}
+.modal-overlay.open .modal-sheet{transform:translateY(0)}
+.modal-handle{width:34px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 18px}
+.modal-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--cream);margin-bottom:4px}
+.modal-sub{color:var(--muted);font-size:13px;margin-bottom:18px;line-height:1.4}
+/* LAP DIALOG */
+.time-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.time-option{background:var(--surface2);border:2px solid var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer;transition:all .2s}
+.time-option:active,.time-option.selected{border-color:var(--gold);background:#1a1608}
+.time-option-val{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:600;color:var(--gold);margin-bottom:5px}
+.time-option-lbl{font-size:12px;color:var(--muted)}
+.time-input{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;font-size:22px;color:var(--cream);font-family:'JetBrains Mono',monospace;width:100%;text-align:center;outline:none;transition:border-color .2s;margin-bottom:8px}
+.time-input:focus{border-color:var(--gold)}
+.time-input-hint{font-size:12px;color:var(--muted);margin-bottom:16px;text-align:center}
+/* CODE BLOCK */
+.code-block{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--cream);white-space:pre-wrap;line-height:1.7;word-break:break-all;margin-bottom:8px;overflow-x:auto}
+/* ERRORS */
+.error-msg{background:#3d1010;color:var(--red);padding:13px 15px;border-radius:12px;font-size:13px;margin-top:14px;border:1px solid #5a1515;display:none}
+.error-msg.show{display:block}
+.loading-state{display:flex;flex-direction:column;align-items:center;gap:12px}
+.spinner{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* GOOGLE DRIVE */
+.sync-bar{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:16px}
+.sync-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sync-label{font-size:12px;color:var(--muted);flex:1;min-width:120px;line-height:1.4}
+.sync-label.ok{color:var(--green)}
+.sync-label.err{color:var(--red)}
+.sync-btn{background:none;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:'Lato',sans-serif;white-space:nowrap;transition:opacity .15s}
+.sync-btn:active{opacity:.7}
+.sync-btn:disabled{opacity:.35;cursor:default}
+.sync-setup{font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);line-height:1.6;display:none}
+.sync-setup.show{display:block}
+.sync-setup a{color:var(--gold-dim)}
+.sync-setup code{font-family:'JetBrains Mono',monospace;background:var(--surface);padding:1px 5px;border-radius:4px;font-size:10.5px}
+</style>
+
+<!-- HOME -->
+<div id="screen-home" class="screen active">
+<div class="inner">
+  <div class="app-header">
+    <span class="app-logo">📖</span>
+    <div class="app-title">ReadPace</div>
+    <div class="app-subtitle">Track your reading speed like a runner tracks pace</div>
+  </div>
+  <div id="a2hs-banner" class="a2hs-banner">
+    <div class="a2hs-text">📲 <strong>Add to Home Screen:</strong> Safari Share button → "Add to Home Screen"</div>
+    <button class="a2hs-close" onclick="dismissA2HS()">✕</button>
+  </div>
+  <!-- GOOGLE DRIVE SYNC (Picker API — no OAuth verification needed) -->
+  <div class="sync-bar" id="sync-bar">
+    <div class="sync-top">
+      <span style="font-size:18px" id="sync-icon">☁️</span>
+      <div class="sync-label" id="sync-label">Sync with Google Drive — pick a file to load, or save your data.</div>
+      <button class="sync-btn" id="btn-drive-save" onclick="driveSave()" disabled>💾 Save</button>
+      <button class="sync-btn" id="btn-drive-load" onclick="driveLoad()" disabled>📂 Load</button>
+      <button class="sync-btn" id="btn-drive-setup" onclick="toggleSetup()" style="color:var(--muted)">⚙ Setup</button>
+    </div>
+    <div class="sync-setup" id="sync-setup">
+      <strong style="color:var(--cream)">One-time setup (2 min):</strong><br>
+      1. Go to <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> → APIs &amp; Services → Library → enable <strong>Google Drive API</strong> and <strong>Google Picker API</strong>.<br>
+      2. Create an <strong>API key</strong> (Credentials → Create → API key). Restrict it to Picker API + your GitHub Pages domain.<br>
+      3. Create an <strong>OAuth Client ID</strong> (Web app). Add your GitHub Pages URL as an authorised origin. <em>No verification needed</em> — you'll see a consent screen but it's for yourself only.<br>
+      4. Paste both below and save this HTML file.<br><br>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <input id="cfg-apikey" class="time-input" style="font-size:13px;padding:9px 12px;margin:0;text-align:left" placeholder="API Key  (AIza…)">
+        <input id="cfg-clientid" class="time-input" style="font-size:13px;padding:9px 12px;margin:0;text-align:left" placeholder="OAuth Client ID  (…apps.googleusercontent.com)">
+        <button class="btn btn-primary" style="padding:10px" onclick="saveConfig()">Save Config &amp; Connect</button>
+      </div>
+    </div>
+  </div>
+  <div id="import-section">
+    <div id="import-area" class="import-area" onclick="document.getElementById('file-input').click()">
+      <div id="import-content">
+        <div class="import-icon">📂</div>
+        <div class="import-main">Import Book JSON</div>
+        <div class="import-sub">Tap to choose your .json chapter file</div>
+      </div>
+    </div>
+    <input type="file" id="file-input" accept=".json,.epub">
+    <div id="error-msg" class="error-msg"></div>
+  </div>
+  <div id="shelf-section" style="display:none">
+    <div class="shelf-header">
+      <span class="shelf-title">Active Books</span>
+      <button class="shelf-add" onclick="showImportForNew()">+ Add Book</button>
+    </div>
+    <div id="shelf-body"></div>
+  </div>
+  <div id="how-it-works" style="margin-top:20px">
+    <span class="section-label">How it works</span>
+    <div class="steps-list">
+      <div class="step-item"><div class="step-num">1</div><div class="step-text">Run the Python script on your ePub to generate a JSON file, then import it here</div></div>
+      <div class="step-item"><div class="step-num">2</div><div class="step-text">Tap <strong>Open</strong> on a book — the timer starts. Switch books anytime; the previous one pauses automatically</div></div>
+      <div class="step-item"><div class="step-num">3</div><div class="step-text">Tap <strong>Lap Chapter</strong> when done — use the live timer or type your own time (e.g. if you tracked on a watch)</div></div>
+      <div class="step-item"><div class="step-num">4</div><div class="step-text">Tap any completed lap row to edit its time after the fact</div></div>
+    </div>
+    <span class="section-label" style="margin-top:22px">JSON format — both work</span>
+    <div class="code-block">{
+  "title": "Book Title",
+  "author": "Author Name",
+  "chapters": [
+    {"title": "Chapter 1", "wordCount": 3200},
+    {"title": "Chapter 2", "wordCount": 4100}
+  ]
+}
+
+Extra fields (index, href, totalWords, schemaVersion, notes)
+are accepted and ignored — your Python script output works
+directly with no changes needed.</div>
+    <span class="section-label" style="margin-top:18px">Python script — save as epub_to_json.py</span>
+    <div class="code-block">import zipfile, re, json, sys
+from pathlib import Path
+
+def epub_to_json(epub_path):
+    with zipfile.ZipFile(epub_path) as z:
+        container = z.read("META-INF/container.xml").decode()
+        opf_path = re.search(
+            r'full-path="([^"]+\.opf)"', container).group(1)
+        opf_dir = str(Path(opf_path).parent)
+        opf_dir = "" if opf_dir == "." else opf_dir + "/"
+        opf = z.read(opf_path).decode(errors="replace")
+
+        manifest = {m[0]: {"href": m[1], "type": m[2]}
+            for m in re.findall(
+            r'<item\s[^>]*id="([^"]+)"[^>]*href="([^"]+)"'
+            r'[^>]*media-type="([^"]+)"', opf)}
+        spine = re.findall(
+            r'<itemref[^>]+idref="([^"]+)"', opf)
+
+        titles = {}
+        ncx = next((v for v in manifest.values()
+            if "ncx" in v["type"]), None)
+        if ncx:
+            ncx_xml = z.read(
+                opf_dir + ncx["href"]).decode(errors="replace")
+            for m in re.finditer(
+                r'<navPoint[\s\S]*?<text>([\s\S]*?)</text>'
+                r'[\s\S]*?<content[^>]+src="([^"#]+)', ncx_xml):
+                titles[m.group(2).split("/")[-1]] = \
+                    re.sub(r"<[^>]+>","",m.group(1)).strip()
+
+        chapters = []
+        for sid in spine:
+            item = manifest.get(sid)
+            if not item or "html" not in item["type"]:
+                continue
+            try:
+                html = z.read(
+                    opf_dir+item["href"]).decode(errors="replace")
+            except Exception:
+                continue
+            text = re.sub(r"<[^>]+>", " ", html)
+            text = re.sub(r"&[a-z]+;", " ", text)
+            words = len(text.split())
+            if words < 50:
+                continue
+            fname = item["href"].split("/")[-1]
+            title = titles.get(
+                fname, f"Chapter {len(chapters)+1}")
+            chapters.append(
+                {"title": title, "wordCount": words})
+
+        title_m = re.search(
+            r"<dc:title[^>]*>(.*?)</dc:title>", opf)
+        author_m = re.search(
+            r"<dc:creator[^>]*>(.*?)</dc:creator>", opf)
+        return {
+            "title": title_m.group(1).strip()
+                if title_m else Path(epub_path).stem,
+            "author": author_m.group(1).strip()
+                if author_m else "Unknown",
+            "chapters": chapters
+        }
+
+if __name__ == "__main__":
+    path = sys.argv[1] if len(sys.argv) > 1 \
+        else input("ePub path: ").strip()
+    data = epub_to_json(path)
+    out = Path(path).with_suffix(".json")
+    out.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False))
+    print(f"Done: {out}  ({len(data['chapters'])} chapters)")</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6">
+      Run with: <span style="font-family:'JetBrains Mono',monospace;color:var(--gold)">python epub_to_json.py mybook.epub</span><br>
+      Requires Python 3 — no extra libraries needed.
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- READING -->
+<div id="screen-reading" class="screen">
+<div class="inner">
+  <div class="reading-topbar">
+    <div style="display:flex;gap:8px">
+      <button class="end-btn" onclick="endSession()">✕ End</button>
+      <button class="end-btn" id="finish-book-btn" onclick="finishBook()" style="color:var(--gold);border-color:var(--gold-dim)">🏁 Finish Book</button>
+    </div>
+    <div class="topbar-book" id="reading-book-title"></div>
+  </div>
+  <div class="wpm-grid">
+    <div class="wpm-box"><div class="wpm-value" id="current-wpm">—</div><div class="wpm-label">Current WPM</div></div>
+    <div class="wpm-box accent"><div class="wpm-value" id="avg-wpm">—</div><div class="wpm-label">Avg WPM</div></div>
+  </div>
+  <div class="card chapter-card">
+    <span class="ch-progress-label" id="chapter-progress-label">Chapter 1 of 1</span>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="current-ch-title" id="current-ch-title">—</div>
+    <div class="chapter-detail" id="chapter-detail"></div>
+  </div>
+  <div class="card timer-block">
+    <div class="timer-label">Chapter Time</div>
+    <div class="timer-value" id="timer-value">0:00</div>
+    <div class="timer-session"><span class="dot" id="timer-dot"></span><span id="session-time-label">Session: 0:00</span></div>
+    <div class="timer-session" style="margin-top:4px;font-size:12px"><span style="color:var(--gold-dim)">📚</span>&nbsp;<span id="book-total-time-label" style="color:var(--gold-dim)">Book total: 0:00</span></div>
+  </div>
+  <div class="estimate-bar" id="estimate-bar"><span>🏁</span><span id="estimate-text"></span></div>
+  <div class="controls" id="controls-row">
+    <button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸ Pause</button>
+    <button class="lap-btn" id="lap-btn" onclick="openLapDialog()">📌 Lap Chapter</button>
+    <button class="skip-btn" id="skip-btn" onclick="skipChapter()">⏭ Skip</button>
+  </div>
+  <div id="laps-section" class="laps-section" style="display:none">
+    <span class="section-label">Completed Chapters</span>
+    <div class="table-card">
+      <div class="table-header"><span>Chapter</span><span style="text-align:right">Time</span><span style="text-align:right">WPM</span></div>
+      <div id="laps-body"></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Tap a row to edit time · tap a skipped row to un-skip</div>
+  </div>
+</div>
+</div>
+
+<!-- SUMMARY -->
+<div id="screen-summary" class="screen">
+<div class="summary-inner">
+  <div class="trophy">🏆</div>
+  <div class="summary-title">Session Complete</div>
+  <div class="summary-book" id="summary-book-name"></div>
+  <div class="stats-trio">
+    <div class="stat-box"><div class="stat-val" id="s-avg-wpm">—</div><div class="stat-lbl">Avg WPM</div></div>
+    <div class="stat-box"><div class="stat-val" id="s-total-time">—</div><div class="stat-lbl">Total Time</div></div>
+    <div class="stat-box"><div class="stat-val" id="s-words-read">—</div><div class="stat-lbl">Words Read</div></div>
+  </div>
+  <div class="highlights" id="summary-highlights"></div>
+  <span class="section-label">Chapter Breakdown</span>
+  <div class="table-card" style="margin-bottom:18px">
+    <div class="table-header"><span>Chapter</span><span style="text-align:right">Time</span><span style="text-align:right">WPM</span></div>
+    <div id="summary-laps-body"></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="goHome()">Done</button>
+    <button class="btn btn-primary" onclick="goHome()">Back to Shelf</button>
+  </div>
+</div>
+</div>
+
+<!-- HISTORY -->
+<div id="screen-history" class="screen">
+<div class="inner">
+  <div class="history-header">
+    <div class="screen-title">History</div>
+    <button class="clear-btn" onclick="clearHistory()">Clear All</button>
+  </div>
+  <div id="history-body"></div>
+</div>
+</div>
+
+<!-- TAB BAR -->
+<div class="tab-bar" id="tab-bar">
+  <button class="tab active" id="tab-read" onclick="switchTab('home')"><span class="tab-icon">📖</span><span class="tab-label">Read</span></button>
+  <button class="tab" id="tab-history" onclick="switchTab('history')"><span class="tab-icon">🕐</span><span class="tab-label">History</span></button>
+</div>
+
+<!-- LAP MODAL -->
+<div class="modal-overlay" id="lap-modal" onclick="closeLapModal(event)">
+<div class="modal-sheet">
+  <div class="modal-handle"></div>
+  <div class="modal-title" id="lap-modal-title">Log Chapter</div>
+  <div class="modal-sub" id="lap-modal-sub"></div>
+  <div class="time-options">
+    <div class="time-option selected" id="opt-timer" onclick="selectTimeOpt('timer')">
+      <div class="time-option-val" id="opt-timer-val">0:00</div>
+      <div class="time-option-lbl">⏱ Use timer</div>
+    </div>
+    <div class="time-option" id="opt-manual" onclick="selectTimeOpt('manual')">
+      <div class="time-option-val">✎</div>
+      <div class="time-option-lbl">Enter manually</div>
+    </div>
+  </div>
+  <div id="manual-entry" style="display:none">
+    <input type="text" class="time-input" id="manual-time-input" placeholder="m:ss  or  h:mm:ss" inputmode="decimal">
+    <div class="time-input-hint">e.g. 25:30 for 25 min 30 sec · or 1:02:15 for over an hour</div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-ghost" onclick="closeLapModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="confirmLap()">Confirm Lap</button>
+  </div>
+</div>
+</div>
+
+<!-- EDIT LAP MODAL -->
+<div class="modal-overlay" id="edit-modal" onclick="closeEditModal(event)">
+<div class="modal-sheet">
+  <div class="modal-handle"></div>
+  <div class="modal-title" id="edit-modal-title">Edit Chapter</div>
+  <div class="modal-sub" id="edit-modal-sub"></div>
+
+  <!-- Option A: fix the time -->
+  <div style="margin-bottom:18px">
+    <div class="section-label">Fix the recorded time</div>
+    <input type="text" class="time-input" id="edit-time-input" placeholder="m:ss  or  h:mm:ss" inputmode="decimal">
+    <div class="time-input-hint">WPM recalculates automatically · other chapters unaffected</div>
+    <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="confirmEdit()">Save New Time</button>
+  </div>
+
+  <!-- Option B: exclude from average without zeroing -->
+  <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px">
+    <div class="section-label">Exclude from average</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+      Marks this chapter as skipped — time is kept for reference but
+      excluded from WPM average. Other chapters unaffected.
+    </div>
+    <button class="btn" style="width:100%;background:var(--surface2);color:var(--cream);border:1px solid var(--border)" onclick="excludeLap()">⊘ Exclude from Average</button>
+  </div>
+
+  <!-- Option C: redo just this chapter (destructive from here on) -->
+  <div style="border-top:1px solid var(--border);padding-top:16px">
+    <div class="section-label">Redo from this chapter</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+      Removes this lap and all subsequent laps, rewinds the timer to
+      this chapter. Use this only if later chapters also need redoing.
+    </div>
+    <button class="btn" style="width:100%;background:var(--surface2);color:var(--red);border:1px solid #5a1515" onclick="redoChapter()">↩ Redo from Here (removes later laps)</button>
+  </div>
+
+  <div style="margin-top:16px">
+    <button class="btn btn-ghost" style="width:100%" onclick="closeEditModal()">Cancel</button>
+  </div>
+</div>
+</div>
+
+<!-- HISTORY DETAIL MODAL -->
+<div class="modal-overlay" id="detail-modal" onclick="closeDetailModal(event)">
+<div class="modal-sheet">
+  <div class="modal-handle"></div>
+  <div class="modal-title" id="detail-title"></div>
+  <div class="modal-sub" id="detail-sub"></div>
+  <div class="stats-trio" id="detail-stats" style="margin-bottom:14px"></div>
+  <div class="highlights" id="detail-highlights" style="margin-bottom:14px"></div>
+  <span class="section-label">Chapters</span>
+  <div class="table-card"><div class="table-header"><span>Chapter</span><span style="text-align:right">Time</span><span style="text-align:right">WPM</span></div><div id="detail-laps"></div></div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+// STATE
+// ══════════════════════════════════════
+let activeSessions = [];
+let openSessionId  = null;
+let timerInterval  = null;
+let lastTick       = null;
+let lapTimeOpt     = 'timer';
+let editLapIdx     = null;
+
+// ── BOOT ──
+activeSessions = loadActive();
+activeSessions.forEach(s => { s.status = 'paused'; });
+saveActive();
+renderShelf();
+checkA2HS();
+
+// ── PERSIST (localStorage) ──
+function saveActive(){ try{localStorage.setItem('rp_active',JSON.stringify(activeSessions));}catch(e){} }
+function loadActive(){ try{return JSON.parse(localStorage.getItem('rp_active')||'[]');}catch(e){return[];} }
+function saveHistory(h){ try{localStorage.setItem('rp_history',JSON.stringify(h.slice(0,200)));}catch(e){} }
+function loadHistory(){ try{return JSON.parse(localStorage.getItem('rp_history')||'[]');}catch(e){return[];} }
+
+// ── GOOGLE DRIVE PICKER SYNC ──
+// Credentials are stored in localStorage so you only enter them once.
+// No OAuth app verification needed — the Picker lets users choose files
+// from their own Drive; consent screen appears for YOU only (personal use).
+
+const DRIVE_SCOPES   = 'https://www.googleapis.com/auth/drive.file';
+const RPDATA_NAME    = 'readpace_data.json';
+
+let driveApiKey    = '';
+let driveClientId  = '';
+let driveToken     = null;    // access token after sign-in
+let driveTokenExp  = 0;
+let driveFileId    = null;    // ID of the readpace_data.json we last used
+let driveReady     = false;   // gapi picker loaded
+
+// ── load saved config ──
+(function initDriveConfig(){
+  try {
+    driveApiKey   = localStorage.getItem('rp_apikey')  || '';
+    driveClientId = localStorage.getItem('rp_clientid')|| '';
+    driveFileId   = localStorage.getItem('rp_fileid')  || null;
+  } catch(e){}
+  if(driveApiKey && driveClientId) driveInit();
+})();
+
+function saveConfig(){
+  driveApiKey   = (document.getElementById('cfg-apikey').value   || '').trim();
+  driveClientId = (document.getElementById('cfg-clientid').value || '').trim();
+  if(!driveApiKey || !driveClientId){ setSyncStatus('err','Paste both API key and Client ID.'); return; }
+  try {
+    localStorage.setItem('rp_apikey',  driveApiKey);
+    localStorage.setItem('rp_clientid',driveClientId);
+  } catch(e){}
+  document.getElementById('sync-setup').classList.remove('show');
+  document.getElementById('btn-drive-setup').style.display = 'none';
+  driveInit();
+}
+
+function toggleSetup(){
+  const el = document.getElementById('sync-setup');
+  el.classList.toggle('show');
+  if(el.classList.contains('show')){
+    document.getElementById('cfg-apikey').value   = driveApiKey;
+    document.getElementById('cfg-clientid').value = driveClientId;
+  }
+}
+
+function driveInit(){
+  setSyncStatus('info','Connecting to Google Drive…');
+  gapi.load('client:picker', () => {
+    gapi.client.init({ apiKey: driveApiKey, discoveryDocs:['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] })
+      .then(() => {
+        driveReady = true;
+        driveRequestToken(/*silent*/true);
+      })
+      .catch(err => setSyncStatus('err', 'Drive init error: ' + (err.message||err.error?.message||JSON.stringify(err))));
+  });
+}
+
+function driveRequestToken(silent){
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: driveClientId,
+    scope: DRIVE_SCOPES,
+    prompt: silent ? 'none' : '',
+    callback: resp => {
+      if(resp.error){ 
+        if(silent){ setSyncStatus('idle'); } 
+        else { setSyncStatus('err','Auth failed: '+resp.error); }
+        return; 
+      }
+      driveToken    = resp.access_token;
+      driveTokenExp = Date.now() + (resp.expires_in - 30) * 1000;
+      setSyncStatus('ok','Google Drive connected. Use Save/Load to sync.');
+      document.getElementById('btn-drive-save').disabled = false;
+      document.getElementById('btn-drive-load').disabled = false;
+    }
+  });
+  client.requestAccessToken({ prompt: silent ? 'none' : '' });
+}
+
+function ensureToken(cb){
+  if(driveToken && Date.now() < driveTokenExp){ cb(); return; }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: driveClientId,
+    scope: DRIVE_SCOPES,
+    prompt: '',
+    callback: resp => {
+      if(resp.error){ setSyncStatus('err','Sign-in failed: '+resp.error); return; }
+      driveToken    = resp.access_token;
+      driveTokenExp = Date.now() + (resp.expires_in - 30) * 1000;
+      cb();
+    }
+  });
+  client.requestAccessToken({ prompt: '' });
+}
+
+// ── SAVE ──
+async function driveSave(){
+  if(!driveReady || !driveApiKey){ setSyncStatus('err','Complete setup first (⚙ Setup).'); return; }
+  ensureToken(async () => {
+    setSyncStatus('info','Saving to Drive…');
+    disableDriveBtns(true);
+    try {
+      const body = JSON.stringify({ active: activeSessions, history: loadHistory(), savedAt: new Date().toISOString() }, null, 2);
+      if(driveFileId){
+        // Update existing file
+        await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,{
+          method:'PATCH',
+          headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' },
+          body
+        });
+      } else {
+        // Create new file in Drive root
+        const meta = await (await fetch('https://www.googleapis.com/drive/v3/files',{
+          method:'POST',
+          headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' },
+          body: JSON.stringify({ name: RPDATA_NAME, mimeType:'application/json' })
+        })).json();
+        driveFileId = meta.id;
+        try{ localStorage.setItem('rp_fileid', driveFileId); }catch(e){}
+        await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,{
+          method:'PATCH',
+          headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' },
+          body
+        });
+      }
+      setSyncStatus('ok','✓ Saved to Google Drive ('+ new Date().toLocaleTimeString() +')');
+    } catch(e){ setSyncStatus('err','Save failed: '+e.message); }
+    disableDriveBtns(false);
+  });
+}
+
+// ── LOAD via Picker ──
+function driveLoad(){
+  if(!driveReady || !driveApiKey){ setSyncStatus('err','Complete setup first (⚙ Setup).'); return; }
+  ensureToken(() => {
+    const picker = new google.picker.PickerBuilder()
+      .addView(new google.picker.DocsView(google.picker.ViewId.DOCS)
+        .setMimeTypes('application/json')
+        .setQuery('readpace'))
+      .setOAuthToken(driveToken)
+      .setDeveloperKey(driveApiKey)
+      .setCallback(pickerCallback)
+      .setTitle('Choose your ReadPace data file')
+      .build();
+    picker.setVisible(true);
+  });
+}
+
+function pickerCallback(data){
+  if(data.action !== google.picker.Action.PICKED) return;
+  const file = data.docs[0];
+  driveFileId = file.id;
+  try{ localStorage.setItem('rp_fileid', driveFileId); }catch(e){}
+  setSyncStatus('info','Loading from Drive…');
+  disableDriveBtns(true);
+  fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`,{
+    headers:{ Authorization:'Bearer '+driveToken }
+  })
+  .then(r => r.json())
+  .then(d => {
+    if(d.active && Array.isArray(d.active)){
+      activeSessions = d.active;
+      activeSessions.forEach(s => { s.status = 'paused'; });
+      saveActive();
+    }
+    if(d.history && Array.isArray(d.history)) saveHistory(d.history);
+    renderShelf(); 
+    try{ renderHistory(); }catch(e){}
+    setSyncStatus('ok','✓ Loaded from Google Drive ('+ new Date().toLocaleTimeString() +')');
+  })
+  .catch(e => setSyncStatus('err','Load failed: '+e.message))
+  .finally(() => disableDriveBtns(false));
+}
+
+function setSyncStatus(type, msg){
+  const lbl  = document.getElementById('sync-label');
+  const icon = document.getElementById('sync-icon');
+  if(type==='ok'){   lbl.className='sync-label ok';  icon.textContent='✅'; }
+  else if(type==='err'){ lbl.className='sync-label err'; icon.textContent='⚠️'; }
+  else if(type==='info'){ lbl.className='sync-label'; icon.textContent='🔄'; }
+  else { lbl.className='sync-label'; icon.textContent='☁️'; }
+  if(msg) lbl.textContent = msg;
+}
+
+function disableDriveBtns(on){
+  document.getElementById('btn-drive-save').disabled = on;
+  document.getElementById('btn-drive-load').disabled = on;
+}
+
+function setSyncLabel(msg, ok){
+  setSyncStatus(ok?'ok':'err', msg);
+  setTimeout(() => setSyncStatus('ok', 'Google Drive connected.'), 4000);
+}
+
+function setSyncIdle(){
+  setSyncStatus('idle','Sync with Google Drive — pick a file to load, or save your data.');
+}
+
+
+// ── FILE INPUT ──
+document.getElementById('file-input').addEventListener('change', e => {
+  const f = e.target.files[0]; if(f) loadFile(f); e.target.value='';
+});
+const ia = document.getElementById('import-area');
+ia.addEventListener('dragover', e => { e.preventDefault(); ia.classList.add('drag-over'); });
+ia.addEventListener('dragleave', () => ia.classList.remove('drag-over'));
+ia.addEventListener('drop', e => { e.preventDefault(); ia.classList.remove('drag-over'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+async function loadFile(file){
+  hideError();
+  const n = file.name.toLowerCase();
+  if(n.endsWith('.json')) { readJSON(file); }
+  else if(n.endsWith('.epub')) { showImportLoading(true); try{ createSession(await parseEpub(file)); }catch(e){ showError(e.message); } showImportLoading(false); }
+  else showError('Please choose a .json or .epub file.');
+}
+
+function readJSON(file){
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const d = JSON.parse(e.target.result);
+      if(!d.chapters||!Array.isArray(d.chapters)||d.chapters.length===0)
+        throw new Error('JSON must have a "chapters" array with at least one entry.');
+
+      // Normalise chapters — accept both simple {title, wordCount} and the
+      // richer format {index, title, href, wordCount} produced by the advanced
+      // Python script.  Strip zero-word entries (front-matter stubs etc.).
+      const chapters = d.chapters
+        .map((c, i) => ({
+          title: (c.title || `Chapter ${i + 1}`).trim(),
+          wordCount: Number(c.wordCount) || 0
+        }))
+        .filter(c => c.wordCount > 0);
+
+      if(chapters.length === 0)
+        throw new Error('All chapters have 0 words — check the JSON file.');
+
+      createSession({
+        title:   (d.title  || file.name.replace(/\.json$/i, '')).trim(),
+        author:  (d.author || 'Unknown').trim(),
+        chapters
+      });
+    } catch(err){ showError('JSON error: ' + err.message); }
+  };
+  r.readAsText(file);
+}
+
+function createSession(book){
+  if(activeSessions.find(s=>s.bookTitle===book.title)){ showError(`"${book.title}" is already in your shelf.`); return; }
+  const s = { id:Date.now(), bookTitle:book.title, bookAuthor:book.author, chapters:book.chapters, laps:[], chapterIdx:0, chapterElapsed:0, sessionElapsed:0, totalBookElapsed:0, status:'paused' };
+  activeSessions.push(s);
+  saveActive();
+  hideImportSection();
+  renderShelf();
+  openSession(s.id);
+}
+
+function showImportLoading(on){
+  document.getElementById('import-content').innerHTML = on
+    ? '<div class="loading-state"><div class="spinner"></div><div style="color:var(--muted);font-size:13px">Parsing…</div></div>'
+    : '<div class="import-icon">📂</div><div class="import-main">Import Book JSON</div><div class="import-sub">Tap to choose your .json chapter file</div>';
+}
+function hideImportSection(){ document.getElementById('import-section').style.display='none'; document.getElementById('how-it-works').style.display='none'; }
+function showImportForNew(){ document.getElementById('import-section').style.display='block'; document.getElementById('how-it-works').style.display='block'; }
+
+// ── SHELF ──
+function renderShelf(){
+  const shelf = document.getElementById('shelf-section');
+  const body  = document.getElementById('shelf-body');
+  if(activeSessions.length===0){ shelf.style.display='none'; document.getElementById('import-section').style.display='block'; document.getElementById('how-it-works').style.display='block'; return; }
+  shelf.style.display='block';
+  const cols=['#e2c97e','#a0855a','#7a9e7e','#7a8ea0','#a07a9e','#9e8a7a'];
+  body.innerHTML = activeSessions.map((s,i)=>{
+    const color=cols[i%cols.length];
+    const sc=s.laps.filter(l=>!l.skipped), tw=sc.reduce((x,l)=>x+l.wordCount,0), tt=sc.reduce((x,l)=>x+l.seconds,0);
+    const avg=tt>0?Math.round((tw/tt)*60):null;
+    const ch=s.chapters[s.chapterIdx];
+    const run=s.status==='running';
+    const totalWords=s.chapters.reduce((x,c)=>x+c.wordCount,0);
+    return `<div class="book-shelf-item ${run?'is-running':''}" onclick="openSession(${s.id})">
+      <div class="bsi-spine" style="background:${color}"></div>
+      <div class="bsi-body">
+        <div class="bsi-top">
+          <div class="bsi-title">${esc(s.bookTitle)}</div>
+          <span class="bsi-status ${run?'running':'paused'}">${run?'● Running':'⏸ Paused'}</span>
+        </div>
+        <div class="bsi-meta">
+          <span>Ch ${s.chapterIdx+1}/${s.chapters.length}</span>
+          <span style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ch?.title||'')}</span>
+          ${avg?`<span class="bsi-wpm">${avg} avg WPM</span>`:''}
+        </div>
+        <div class="bsi-meta" style="margin-top:4px">
+          <span style="color:var(--gold-dim);font-size:11px">📝 ${tw.toLocaleString()} / ${totalWords.toLocaleString()} words</span>
+        </div>
+      </div>
+      <div class="bsi-actions" onclick="event.stopPropagation()">
+        <button class="bsi-btn open" onclick="openSession(${s.id})">Open</button>
+        <button class="bsi-btn del" onclick="deleteSession(${s.id})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deleteSession(id){
+  if(!confirm('Remove from active books?')) return;
+  if(openSessionId===id){ stopTimer(); openSessionId=null; }
+  activeSessions=activeSessions.filter(s=>s.id!==id);
+  saveActive(); renderShelf();
+}
+
+// ── OPEN ──
+function openSession(id){
+  const running=activeSessions.find(s=>s.status==='running');
+  if(running&&running.id!==id){ running.status='paused'; stopTimer(); }
+  const s=activeSessions.find(s=>s.id===id); if(!s) return;
+  openSessionId=id;
+  s.status='running';
+  saveActive(); renderShelf();
+  updateReadingUI(); rebuildLapsList();
+  document.getElementById('tab-bar').style.display='none';
+  showScreen('reading');
+  startTimer();
+}
+
+// ── TIMER ──
+function startTimer(){ stopTimer(); lastTick=Date.now(); timerInterval=setInterval(()=>{ const s=getOpen(); if(!s||s.status!=='running') return; const now=Date.now(), d=(now-lastTick)/1000; lastTick=now; s.chapterElapsed+=d; s.sessionElapsed+=d; updateTimerUI(); },100); }
+function stopTimer(){ clearInterval(timerInterval); timerInterval=null; }
+
+function togglePause(){
+  const s=getOpen(); if(!s) return;
+  s.status = s.status==='running' ? 'paused' : 'running';
+  if(s.status==='running'){ lastTick=Date.now(); startTimer(); } else stopTimer();
+  saveActive();
+  document.getElementById('pause-btn').textContent = s.status==='running'?'⏸ Pause':'▶ Resume';
+  document.getElementById('timer-dot').className = 'dot'+(s.status==='running'?'':' paused');
+  document.getElementById('timer-value').className = 'timer-value'+(s.status==='running'?'':' paused');
+}
+
+function endSession(){
+  const s=getOpen(); if(s){ s.status='paused'; s.totalBookElapsed=(s.totalBookElapsed||0)+s.sessionElapsed; s.sessionElapsed=0; stopTimer(); saveActive(); }
+  openSessionId=null;
+  document.getElementById('tab-bar').style.display='flex';
+  renderShelf(); showScreen('home');
+}
+
+// ── LAP DIALOG ──
+function openLapDialog(){
+  const s=getOpen(); if(!s) return;
+  const ch=s.chapters[s.chapterIdx], isLast=s.chapterIdx>=s.chapters.length-1;
+  document.getElementById('lap-modal-title').textContent='Log: '+ch.title;
+  document.getElementById('lap-modal-sub').textContent=`${ch.wordCount.toLocaleString()} words · ${isLast?'Final chapter':'Chapter '+(s.chapterIdx+1)+' of '+s.chapters.length}`;
+  document.getElementById('opt-timer-val').textContent=formatTime(s.chapterElapsed);
+  lapTimeOpt='timer';
+  document.getElementById('opt-timer').classList.add('selected');
+  document.getElementById('opt-manual').classList.remove('selected');
+  document.getElementById('manual-entry').style.display='none';
+  document.getElementById('manual-time-input').value='';
+  document.getElementById('lap-modal').classList.add('open');
+}
+
+function selectTimeOpt(opt){
+  lapTimeOpt=opt;
+  document.getElementById('opt-timer').classList.toggle('selected',opt==='timer');
+  document.getElementById('opt-manual').classList.toggle('selected',opt==='manual');
+  document.getElementById('manual-entry').style.display=opt==='manual'?'block':'none';
+  if(opt==='manual') setTimeout(()=>document.getElementById('manual-time-input').focus(),60);
+}
+
+function confirmLap(){
+  const s=getOpen(); if(!s) return;
+  let seconds;
+  if(lapTimeOpt==='timer'){ seconds=s.chapterElapsed; }
+  else {
+    seconds=parseTime(document.getElementById('manual-time-input').value);
+    if(!seconds||seconds<=0){ flash('manual-time-input'); return; }
+  }
+  document.getElementById('lap-modal').classList.remove('open');
+  recordLap(s,seconds);
+}
+
+function recordLap(s,seconds){
+  const ch=s.chapters[s.chapterIdx];
+  s.laps.push({ title:ch.title, wordCount:ch.wordCount, seconds:seconds, wpm:seconds>0?(ch.wordCount/seconds)*60:0 });
+  const isLast=s.chapterIdx>=s.chapters.length-1;
+  if(isLast){
+    s.status='done'; stopTimer();
+    const totalTime=(s.totalBookElapsed||0)+s.sessionElapsed;
+    const hist=loadHistory(); hist.unshift({ id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, finished:true });
+    saveHistory(hist);
+    activeSessions=activeSessions.filter(x=>x.id!==s.id);
+    openSessionId=null; saveActive(); renderShelf();
+    showSummaryScreen(s);
+    document.getElementById('tab-bar').style.display='flex';
+  } else {
+    s.chapterIdx++; s.chapterElapsed=0;
+    saveActive(); updateReadingUI(); rebuildLapsList();
+  }
+}
+
+// ── FINISH BOOK (close out entire book, not just session) ──
+function finishBook(){
+  const s=getOpen(); if(!s) return;
+  if(!confirm('Mark this book as finished? It will be removed from active books and saved to history.')) return;
+  s.status='done'; stopTimer();
+  const totalTime=(s.totalBookElapsed||0)+s.sessionElapsed;
+  const hist=loadHistory(); hist.unshift({ id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, finished:true });
+  saveHistory(hist);
+  activeSessions=activeSessions.filter(x=>x.id!==s.id);
+  openSessionId=null; saveActive(); renderShelf();
+  showSummaryScreen(s);
+  document.getElementById('tab-bar').style.display='flex';
+}
+
+
+
+// ── SKIP CHAPTER ──
+function skipChapter(){
+  const s=getOpen(); if(!s) return;
+  const ch=s.chapters[s.chapterIdx];
+  // Record as skipped lap (wordCount=0, wpm=0, skipped=true)
+  s.laps.push({ title:ch.title, wordCount:0, seconds:0, wpm:0, skipped:true });
+  const isLast=s.chapterIdx>=s.chapters.length-1;
+  if(isLast){
+    s.status='done'; stopTimer();
+    const totalTime=(s.totalBookElapsed||0)+s.sessionElapsed;
+    const hist=loadHistory(); hist.unshift({ id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, finished:true });
+    saveHistory(hist);
+    activeSessions=activeSessions.filter(x=>x.id!==s.id);
+    openSessionId=null; saveActive(); renderShelf();
+    showSummaryScreen(s);
+    document.getElementById('tab-bar').style.display='flex';
+  } else {
+    s.chapterIdx++; s.chapterElapsed=0;
+    saveActive(); updateReadingUI(); rebuildLapsList();
+  }
+}
+
+// ── TOGGLE SKIP on completed lap ──
+function toggleSkipLap(idx){
+  const s=getOpen(); if(!s||idx>=s.laps.length) return;
+  const lap=s.laps[idx];
+  if(lap.skipped){
+    // Un-skip: open edit modal so user can enter the real time
+    lap.skipped=false; lap.wordCount=s.chapters[idx]?.wordCount||0;
+    saveActive(); rebuildLapsList(); updateTimerUI();
+  } else {
+    // Mark as skipped
+    lap.skipped=true; lap.wordCount=0; lap.seconds=0; lap.wpm=0;
+    saveActive(); rebuildLapsList(); updateTimerUI();
+  }
+}
+
+// ── EDIT LAP ──
+function openEditLap(idx){
+  const s=getOpen(); if(!s||idx>=s.laps.length) return;
+  editLapIdx=idx;
+  const lap=s.laps[idx];
+  // Restore wordCount from chapters if it was zeroed by a previous skip
+  const realWC = s.chapters[idx]?.wordCount || lap.wordCount;
+  document.getElementById('edit-modal-title').textContent='Edit: '+lap.title;
+  document.getElementById('edit-modal-sub').textContent=
+    `${realWC.toLocaleString()} words · `+
+    (lap.skipped ? 'currently excluded from average' : `recorded: ${formatTime(lap.seconds)}`);
+  document.getElementById('edit-time-input').value = lap.skipped ? '' : formatTime(lap.seconds);
+  document.getElementById('edit-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('edit-time-input').focus(),60);
+}
+
+function confirmEdit(){
+  // Save a new time for this single lap — no other laps touched
+  const s=getOpen(); if(!s||editLapIdx===null) return;
+  const sec=parseTime(document.getElementById('edit-time-input').value);
+  if(!sec||sec<=0){ flash('edit-time-input'); return; }
+  const lap=s.laps[editLapIdx];
+  // Restore real wordCount from chapters in case it was previously zeroed
+  const realWC = s.chapters[editLapIdx]?.wordCount || lap.wordCount;
+  lap.wordCount = realWC;
+  lap.seconds   = sec;
+  lap.wpm       = sec > 0 ? (realWC / sec) * 60 : 0;
+  lap.skipped   = false;  // un-skip if it was excluded
+  saveActive(); rebuildLapsList(); updateTimerUI();
+  closeEditModal();
+}
+
+function excludeLap(){
+  // Mark this single lap as excluded from average — keeps the title visible,
+  // sets skipped=true so WPM calculations ignore it. No other laps touched.
+  const s=getOpen(); if(!s||editLapIdx===null) return;
+  const lap=s.laps[editLapIdx];
+  lap.skipped   = true;
+  lap.wordCount = 0;
+  lap.seconds   = 0;
+  lap.wpm       = 0;
+  saveActive(); rebuildLapsList(); updateTimerUI();
+  closeEditModal();
+}
+
+function closeEditModal(e){
+  if(e&&e.target!==document.getElementById('edit-modal')) return;
+  document.getElementById('edit-modal').classList.remove('open');
+  editLapIdx=null;
+}
+
+// ── REDO FROM THIS CHAPTER (destructive — removes this and all later laps) ──
+function redoChapter(){
+  const s=getOpen(); if(!s||editLapIdx===null) return;
+  if(!confirm(`Remove "${s.laps[editLapIdx].title}" and all subsequent laps and rewind the timer to this chapter?`)) return;
+  s.laps        = s.laps.slice(0, editLapIdx);
+  s.chapterIdx  = editLapIdx;
+  s.chapterElapsed = 0;
+  saveActive();
+  closeEditModal();
+  updateReadingUI();
+  rebuildLapsList();
+  updateTimerUI();
+}
+
+// ── READING UI ──
+function updateReadingUI(){
+  const s=getOpen(); if(!s) return;
+  const ch=s.chapters[s.chapterIdx], isLast=s.chapterIdx>=s.chapters.length-1;
+  document.getElementById('reading-book-title').textContent=s.bookTitle;
+  document.getElementById('chapter-progress-label').textContent=`Chapter ${s.chapterIdx+1} of ${s.chapters.length}`;
+  document.getElementById('progress-fill').style.width=`${(s.chapterIdx/s.chapters.length)*100}%`;
+  document.getElementById('current-ch-title').textContent=ch.title;
+  document.getElementById('chapter-detail').textContent=`${ch.wordCount.toLocaleString()} words in this chapter`;
+  document.getElementById('lap-btn').textContent=isLast?'🏁 Finish Book':'📌 Lap Chapter';
+  document.getElementById('pause-btn').textContent=s.status==='running'?'⏸ Pause':'▶ Resume';
+  document.getElementById('timer-dot').className='dot'+(s.status==='running'?'':' paused');
+  document.getElementById('timer-value').className='timer-value'+(s.status==='running'?'':' paused');
+}
+
+function updateTimerUI(){
+  const s=getOpen(); if(!s) return;
+  document.getElementById('timer-value').textContent=formatTime(s.chapterElapsed);
+  document.getElementById('session-time-label').textContent='Session: '+formatTime(s.sessionElapsed);
+  // Total time = all previous sessions + current session elapsed
+  const prevTotal=s.totalBookElapsed||0;
+  document.getElementById('book-total-time-label').textContent='Book total: '+formatTime(prevTotal+s.sessionElapsed);
+  const ch=s.chapters[s.chapterIdx];
+  document.getElementById('current-wpm').textContent = ch&&s.chapterElapsed>=5 ? Math.round((ch.wordCount/s.chapterElapsed)*60).toLocaleString() : '—';
+  const counted=s.laps.filter(l=>!l.skipped);
+  const tw=counted.reduce((x,l)=>x+l.wordCount,0), tt=counted.reduce((x,l)=>x+l.seconds,0);
+  const avg=tt>0?(tw/tt)*60:null;
+  document.getElementById('avg-wpm').textContent=avg?Math.round(avg).toLocaleString():'—';
+  const wpe=avg||(ch&&s.chapterElapsed>=5?(ch.wordCount/s.chapterElapsed)*60:null);
+  const eb=document.getElementById('estimate-bar');
+  // estimate only counts non-skipped remaining chapters
+  const remaining=s.chapters.slice(s.chapterIdx).filter((_,i)=>{ const lapIdx=s.chapterIdx+i; return !s.laps[lapIdx]?.skipped; });
+  if(wpe&&wpe>0){ const wl=remaining.reduce((x,c)=>x+c.wordCount,0); document.getElementById('estimate-text').textContent=`Est. ${formatTime((wl/wpe)*60)} to finish at current pace`; eb.classList.add('show'); }
+  else eb.classList.remove('show');
+}
+
+function rebuildLapsList(){
+  const s=getOpen(), body=document.getElementById('laps-body'), sec=document.getElementById('laps-section');
+  if(!s||s.laps.length===0){ sec.style.display='none'; body.innerHTML=''; return; }
+  sec.style.display='block';
+  body.innerHTML=[...s.laps].reverse().map((l,ri)=>{
+    const idx=s.laps.length-1-ri;
+    if(l.skipped) return `<div class="table-row row-skipped" onclick="toggleSkipLap(${idx})" title="Tap to un-skip">
+      <span class="row-name">${esc(l.title)}<span class="skip-badge">skipped</span></span>
+      <span class="row-time">—</span>
+      <span class="row-wpm" style="color:var(--muted)">—</span>
+    </div>`;
+    return `<div class="table-row" onclick="openEditLap(${idx})"><span class="row-name">${esc(l.title)}</span><span class="row-time">${formatTime(l.seconds)}</span><span class="row-wpm">${Math.round(l.wpm)}</span></div>`;
+  }).join('');
+}
+
+// ── SUMMARY ──
+function showSummaryScreen(s){
+  const counted=s.laps.filter(l=>!l.skipped);
+  const tw=counted.reduce((x,l)=>x+l.wordCount,0), tt=counted.reduce((x,l)=>x+l.seconds,0), avg=tt>0?(tw/tt)*60:0;
+  document.getElementById('summary-book-name').textContent=s.bookTitle;
+  document.getElementById('s-avg-wpm').textContent=Math.round(avg).toLocaleString();
+  document.getElementById('s-total-time').textContent=formatTime(tt);
+  document.getElementById('s-words-read').textContent=tw.toLocaleString();
+  const scoredLaps=s.laps.filter(l=>!l.skipped);
+  if(scoredLaps.length>=2){
+    const f=scoredLaps.reduce((a,b)=>a.wpm>b.wpm?a:b), sl=scoredLaps.reduce((a,b)=>a.wpm<b.wpm?a:b);
+    document.getElementById('summary-highlights').innerHTML=hlCard('🔥','orange','Fastest',f)+hlCard('🐢','var(--blue)','Slowest',sl);
+  } else document.getElementById('summary-highlights').innerHTML='';
+  const mx=scoredLaps.length?Math.max(...scoredLaps.map(l=>l.wpm)):0, mn=scoredLaps.length?Math.min(...scoredLaps.map(l=>l.wpm)):0;
+  document.getElementById('summary-laps-body').innerHTML=s.laps.map(l=>{
+    if(l.skipped) return `<div class="table-row row-skipped" style="cursor:default"><span class="row-name">${esc(l.title)}<span class="skip-badge">skipped</span></span><span class="row-time">—</span><span class="row-wpm" style="color:var(--muted)">—</span></div>`;
+    const c=l.wpm===mx?'var(--green)':l.wpm===mn?'var(--red)':'var(--gold)';
+    return `<div class="table-row" style="cursor:default"><span class="row-name">${esc(l.title)}</span><span class="row-time">${formatTime(l.seconds)}</span><span class="row-wpm" style="color:${c}">${Math.round(l.wpm)}</span></div>`;
+  }).join('');
+  showScreen('summary');
+}
+
+function hlCard(ic,col,lbl,lap){ return `<div class="highlight-card"><div class="hl-label" style="color:${col}">${ic} ${lbl}</div><div class="hl-chapter">${esc(lap.title)}</div><div class="hl-wpm" style="color:${col}">${Math.round(lap.wpm)} WPM</div></div>`; }
+function goHome(){ renderShelf(); showScreen('home'); }
+
+// ── HISTORY ──
+function renderHistory(){
+  const sessions=loadHistory(), body=document.getElementById('history-body');
+  if(!sessions.length){ body.innerHTML='<div class="empty-state"><div class="empty-icon">🕐</div><div class="empty-text">No sessions yet</div><div class="empty-sub">Finish a reading session to see history</div></div>'; return; }
+  body.innerHTML=sessions.map(s=>{
+    const hc=s.laps.filter(l=>!l.skipped), tw=hc.reduce((x,l)=>x+l.wordCount,0), tt=hc.reduce((x,l)=>x+l.seconds,0), avg=tt>0?Math.round((tw/tt)*60):0;
+    const dt=new Date(s.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    return `<div class="session-item" onclick="openDetail(${s.id})"><div class="si-top"><div class="si-book">${esc(s.bookTitle)}</div><div class="si-wpm">${avg} WPM</div></div><div class="si-bottom"><span>📖 ${s.laps.length} ch</span><span>⏱ ${formatTime(s.totalSeconds)}</span><span>📝 ${tw.toLocaleString()} words</span><span>📅 ${dt}</span></div></div>`;
+  }).join('');
+}
+
+function clearHistory(){ if(confirm('Clear all history?')){ saveHistory([]); renderHistory(); } }
+
+function openDetail(id){
+  const s=loadHistory().find(x=>x.id===id); if(!s) return;
+  const counted2=s.laps.filter(l=>!l.skipped);
+  const tw=counted2.reduce((x,l)=>x+l.wordCount,0), tt=counted2.reduce((x,l)=>x+l.seconds,0), avg=tt>0?Math.round((tw/tt)*60):0;
+  const dt=new Date(s.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  document.getElementById('detail-title').textContent=s.bookTitle;
+  document.getElementById('detail-sub').textContent=s.bookAuthor+' · '+dt;
+  document.getElementById('detail-stats').innerHTML=`<div class="stat-box"><div class="stat-val">${avg}</div><div class="stat-lbl">Avg WPM</div></div><div class="stat-box"><div class="stat-val">${formatTime(s.totalSeconds)}</div><div class="stat-lbl">Time</div></div><div class="stat-box"><div class="stat-val">${tw.toLocaleString()}</div><div class="stat-lbl">Words</div></div>`;
+  if(counted2.length>=2){
+    const f=counted2.reduce((a,b)=>a.wpm>b.wpm?a:b), sl=counted2.reduce((a,b)=>a.wpm<b.wpm?a:b);
+    document.getElementById('detail-highlights').innerHTML=hlCard('🔥','orange','Fastest',f)+hlCard('🐢','var(--blue)','Slowest',sl);
+  } else document.getElementById('detail-highlights').innerHTML='';
+  const mx=counted2.length?Math.max(...counted2.map(l=>l.wpm)):0, mn=counted2.length?Math.min(...counted2.map(l=>l.wpm)):0;
+  document.getElementById('detail-laps').innerHTML=s.laps.map(l=>{
+    if(l.skipped) return `<div class="table-row row-skipped" style="cursor:default"><span class="row-name">${esc(l.title)}<span class="skip-badge">skipped</span></span><span class="row-time">—</span><span class="row-wpm" style="color:var(--muted)">—</span></div>`;
+    const c=l.wpm===mx?'var(--green)':l.wpm===mn?'var(--red)':'var(--gold)';
+    return `<div class="table-row" style="cursor:default"><span class="row-name">${esc(l.title)}</span><span class="row-time">${formatTime(l.seconds)}</span><span class="row-wpm" style="color:${c}">${Math.round(l.wpm)}</span></div>`;
+  }).join('');
+  document.getElementById('detail-modal').classList.add('open');
+}
+function closeDetailModal(e){ if(e&&e.target!==document.getElementById('detail-modal')) return; document.getElementById('detail-modal').classList.remove('open'); }
+
+// ── EPUB PARSER (fallback) ──
+async function parseEpub(file){
+  if(typeof JSZip==='undefined') throw new Error('Use the Python script to convert your ePub to JSON first.');
+  const zip=await JSZip.loadAsync(file);
+  const cx=await zip.file("META-INF/container.xml")?.async("text"); if(!cx) throw new Error("Invalid ePub");
+  const op=cx.match(/full-path="([^"]+\.opf)"/)?.[1]; if(!op) throw new Error("No OPF");
+  const ox=await zip.file(op)?.async("text"); if(!ox) throw new Error("No OPF content");
+  const od=op.includes("/")?op.substring(0,op.lastIndexOf("/")+1):"";
+  const mf={};
+  for(const m of ox.matchAll(/<item\s[^>]*id="([^"]+)"[^>]*href="([^"]+)"[^>]*media-type="([^"]+)"/g)) mf[m[1]]={href:m[2],type:m[3]};
+  const sp=[...ox.matchAll(/<itemref[^>]+idref="([^"]+)"/g)].map(m=>m[1]);
+  const nt={};
+  const nx=Object.values(mf).find(v=>v.type==="application/x-dtbncx+xml");
+  if(nx){ const nxx=await zip.file(od+nx.href)?.async("text"); if(nxx) for(const m of nxx.matchAll(/<navPoint[^>]*>[\s\S]*?<text>([\s\S]*?)<\/text>[\s\S]*?<content[^>]+src="([^"#]+)/g)) nt[m[2].split("/").pop()]=m[1].replace(/<[^>]+>/g,"").trim(); }
+  const chs=[];
+  for(const id of sp){ const it=mf[id]; if(!it||(!it.type.includes("html")&&!it.type.includes("xhtml"))) continue; const ht=await zip.file(od+it.href)?.async("text"); if(!ht) continue; const wc=ht.replace(/<[^>]+>/g," ").replace(/&[a-z]+;/gi," ").split(/\s+/).filter(w=>w).length; if(wc<50) continue; const fn=it.href.split("/").pop(); chs.push({title:nt[fn]||`Chapter ${chs.length+1}`,wordCount:wc}); }
+  if(!chs.length) throw new Error("No chapters found. ePub may be DRM-protected — use the Python script instead.");
+  const ti=ox.match(/<dc:title[^>]*>([\s\S]*?)<\/dc:title>/)?.[1]?.trim()||file.name.replace(".epub","");
+  const au=ox.match(/<dc:creator[^>]*>([\s\S]*?)<\/dc:creator>/)?.[1]?.trim()||"Unknown";
+  return {title:ti,author:au,chapters:chs};
+}
+
+// ── NAVIGATION ──
+function showScreen(n){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('screen-'+n).classList.add('active'); }
+function switchTab(t){ document.getElementById('tab-read').className='tab'+(t==='home'?' active':''); document.getElementById('tab-history').className='tab'+(t==='history'?' active':''); if(t==='history') renderHistory(); showScreen(t); }
+
+// ── A2HS ──
+function dismissA2HS(){ document.getElementById('a2hs-banner').classList.add('hidden'); try{localStorage.setItem('rp_a2hs','1');}catch(e){} }
+function checkA2HS(){ if(window.navigator.standalone===true||localStorage.getItem('rp_a2hs')||!/ipad|iphone|ipod/i.test(navigator.userAgent)) document.getElementById('a2hs-banner').classList.add('hidden'); }
+
+// ── UTILS ──
+function getOpen(){ return activeSessions.find(s=>s.id===openSessionId)||null; }
+function formatTime(s){ const t=Math.floor(s); if(t<3600) return `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`; return `${Math.floor(t/3600)}h ${Math.floor((t%3600)/60)}m`; }
+function parseTime(str){
+  if(!str||!str.trim()) return null;
+  const p=str.trim().split(':');
+  try{
+    if(p.length===1){ const n=parseFloat(p[0]); return isNaN(n)||n<=0?null:n; }
+    if(p.length===2){ const m=parseInt(p[0]),s=parseFloat(p[1]); if(isNaN(m)||isNaN(s)||s>=60) return null; return m*60+s; }
+    if(p.length===3){ const h=parseInt(p[0]),m=parseInt(p[1]),s=parseFloat(p[2]); if(isNaN(h)||isNaN(m)||isNaN(s)||m>=60||s>=60) return null; return h*3600+m*60+s; }
+  }catch(e){}
+  return null;
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showError(m){ const e=document.getElementById('error-msg'); e.textContent=m; e.classList.add('show'); }
+function hideError(){ document.getElementById('error-msg').classList.remove('show'); }
+function flash(id){ const el=document.getElementById(id); el.style.borderColor='var(--red)'; setTimeout(()=>el.style.borderColor='',1200); }
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</body>
+</html>
