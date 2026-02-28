@@ -165,11 +165,18 @@ body{font-family:'Lato',sans-serif;color:var(--cream);overscroll-behavior:none}
 .spinner{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* GOOGLE DRIVE */
-.gdrive-bar{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.gdrive-status{font-size:12px;color:var(--muted);flex:1;line-height:1.4}
-.gdrive-status.ok{color:var(--green)}
-.gdrive-status.err{color:var(--red)}
-.gdrive-btn{background:none;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:'Lato',sans-serif;white-space:nowrap}
+.sync-bar{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:16px}
+.sync-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sync-label{font-size:12px;color:var(--muted);flex:1;min-width:120px;line-height:1.4}
+.sync-label.ok{color:var(--green)}
+.sync-label.err{color:var(--red)}
+.sync-btn{background:none;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:'Lato',sans-serif;white-space:nowrap;transition:opacity .15s}
+.sync-btn:active{opacity:.7}
+.sync-btn:disabled{opacity:.35;cursor:default}
+.sync-setup{font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);line-height:1.6;display:none}
+.sync-setup.show{display:block}
+.sync-setup a{color:var(--gold-dim)}
+.sync-setup code{font-family:'JetBrains Mono',monospace;background:var(--surface);padding:1px 5px;border-radius:4px;font-size:10.5px}
 </style>
 
 <!-- HOME -->
@@ -184,14 +191,27 @@ body{font-family:'Lato',sans-serif;color:var(--cream);overscroll-behavior:none}
     <div class="a2hs-text">📲 <strong>Add to Home Screen:</strong> Safari Share button → "Add to Home Screen"</div>
     <button class="a2hs-close" onclick="dismissA2HS()">✕</button>
   </div>
-  <!-- GOOGLE DRIVE SYNC -->
-  <div class="gdrive-bar" id="gdrive-bar">
-    <span id="gdrive-icon" style="font-size:20px">☁️</span>
-    <div class="gdrive-status" id="gdrive-status">Connect Google Drive to sync your data across devices.</div>
-    <button class="gdrive-btn" id="gdrive-auth-btn" onclick="gdriveSignIn()">Connect</button>
-    <button class="gdrive-btn" id="gdrive-save-btn" onclick="gdriveSaveNow()" style="display:none">💾 Save</button>
-    <button class="gdrive-btn" id="gdrive-load-btn" onclick="gdriveLoadNow()" style="display:none">📥 Load</button>
-    <button class="gdrive-btn" id="gdrive-signout-btn" onclick="gdriveSignOut()" style="display:none;color:var(--muted)">Disconnect</button>
+  <!-- GOOGLE DRIVE SYNC (Picker API — no OAuth verification needed) -->
+  <div class="sync-bar" id="sync-bar">
+    <div class="sync-top">
+      <span style="font-size:18px" id="sync-icon">☁️</span>
+      <div class="sync-label" id="sync-label">Sync with Google Drive — pick a file to load, or save your data.</div>
+      <button class="sync-btn" id="btn-drive-save" onclick="driveSave()" disabled>💾 Save</button>
+      <button class="sync-btn" id="btn-drive-load" onclick="driveLoad()" disabled>📂 Load</button>
+      <button class="sync-btn" id="btn-drive-setup" onclick="toggleSetup()" style="color:var(--muted)">⚙ Setup</button>
+    </div>
+    <div class="sync-setup" id="sync-setup">
+      <strong style="color:var(--cream)">One-time setup (2 min):</strong><br>
+      1. Go to <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> → APIs &amp; Services → Library → enable <strong>Google Drive API</strong> and <strong>Google Picker API</strong>.<br>
+      2. Create an <strong>API key</strong> (Credentials → Create → API key). Restrict it to Picker API + your GitHub Pages domain.<br>
+      3. Create an <strong>OAuth Client ID</strong> (Web app). Add your GitHub Pages URL as an authorised origin. <em>No verification needed</em> — you'll see a consent screen but it's for yourself only.<br>
+      4. Paste both below and save this HTML file.<br><br>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <input id="cfg-apikey" class="time-input" style="font-size:13px;padding:9px 12px;margin:0;text-align:left" placeholder="API Key  (AIza…)">
+        <input id="cfg-clientid" class="time-input" style="font-size:13px;padding:9px 12px;margin:0;text-align:left" placeholder="OAuth Client ID  (…apps.googleusercontent.com)">
+        <button class="btn btn-primary" style="padding:10px" onclick="saveConfig()">Save Config &amp; Connect</button>
+      </div>
+    </div>
   </div>
   <div id="import-section">
     <div id="import-area" class="import-area" onclick="document.getElementById('file-input').click()">
@@ -489,314 +509,216 @@ let lastTick       = null;
 let lapTimeOpt     = 'timer';
 let editLapIdx     = null;
 
-// ── PERSIST (localStorage as fast cache; GDrive as source of truth) ──
-let suppressDirty = true;                 // prevents autosave during boot/load
-let driveDirty = false;
-let driveSaveTimer = null;
-const DRIVE_DEBOUNCE_MS = 1200;
-
-function getLocalLastModified(){
-  return Number(localStorage.getItem('rp_lastModified') || '0');
-}
-function setLocalLastModified(ts){
-  try { localStorage.setItem('rp_lastModified', String(ts)); } catch(e){}
-}
-function markDirty(){
-  if (suppressDirty) return;
-  driveDirty = true;
-  setLocalLastModified(Date.now());
-  scheduleDriveSave();
-}
-function scheduleDriveSave(){
-  if (!gdriveToken) return;           // only autosave when connected
-  clearTimeout(driveSaveTimer);
-  driveSaveTimer = setTimeout(() => {
-    if (driveDirty && gdriveToken) gdriveSaveNow(true); // silent autosave
-  }, DRIVE_DEBOUNCE_MS);
-}
-
-function saveActive(){
-  try { localStorage.setItem('rp_active', JSON.stringify(activeSessions)); } catch(e){}
-  markDirty();
-}
-function loadActive(){
-  try { return JSON.parse(localStorage.getItem('rp_active') || '[]'); } catch(e){ return []; }
-}
-function saveHistory(h){
-  try { localStorage.setItem('rp_history', JSON.stringify(h.slice(0,200))); } catch(e){}
-  markDirty();
-}
-function loadHistory(){
-  try { return JSON.parse(localStorage.getItem('rp_history') || '[]'); } catch(e){ return []; }
-}
-
 // ── BOOT ──
 activeSessions = loadActive();
 activeSessions.forEach(s => { s.status = 'paused'; });
 saveActive();
 renderShelf();
 checkA2HS();
-// allow autosave after initial boot paint
-setTimeout(() => { suppressDirty = false; }, 0);
 
-// save when backgrounding/closing (mobile Safari kills tabs aggressively)
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden && driveDirty && gdriveToken) gdriveSaveNow(true);
-});
-window.addEventListener('pagehide', () => {
-  if (driveDirty && gdriveToken) gdriveSaveNow(true);
-});
+// ── PERSIST (localStorage) ──
+function saveActive(){ try{localStorage.setItem('rp_active',JSON.stringify(activeSessions));}catch(e){} }
+function loadActive(){ try{return JSON.parse(localStorage.getItem('rp_active')||'[]');}catch(e){return[];} }
+function saveHistory(h){ try{localStorage.setItem('rp_history',JSON.stringify(h.slice(0,200)));}catch(e){} }
+function loadHistory(){ try{return JSON.parse(localStorage.getItem('rp_history')||'[]');}catch(e){return[];} }
 
+// ── GOOGLE DRIVE PICKER SYNC ──
+// Credentials are stored in localStorage so you only enter them once.
+// No OAuth app verification needed — the Picker lets users choose files
+// from their own Drive; consent screen appears for YOU only (personal use).
 
-// ── GOOGLE DRIVE INTEGRATION ──
-// Replace YOUR_CLIENT_ID below with your OAuth 2.0 client ID from Google Cloud Console.
-// Steps: console.cloud.google.com → APIs & Services → Credentials → Create OAuth client ID (Web application)
-// Authorised JavaScript origins: add your GitHub Pages URL (e.g. https://yourname.github.io)
-const GDRIVE_CLIENT_ID = '71137289288-inqsll4t46ct307it3tv91nfj02p5bqe.apps.googleusercontent.com';
-const GDRIVE_SCOPE     = 'https://www.googleapis.com/auth/drive.appdata';
-const GDRIVE_FILENAME  = 'readpace_data.json';
+const DRIVE_SCOPES   = 'https://www.googleapis.com/auth/drive.file';
+const RPDATA_NAME    = 'readpace_data.json';
 
-let gdriveToken   = null;
-let gdriveFileId  = null;
+let driveApiKey    = '';
+let driveClientId  = '';
+let driveToken     = null;    // access token after sign-in
+let driveTokenExp  = 0;
+let driveFileId    = null;    // ID of the readpace_data.json we last used
+let driveReady     = false;   // gapi picker loaded
 
-async function gdriveEnsureToken(){
-  // Refresh access token if possible (auth2)
-  try{
-    const auth2 = gapi.auth2 && gapi.auth2.getAuthInstance ? gapi.auth2.getAuthInstance() : null;
-    if (!auth2 || !auth2.isSignedIn.get()) return false;
-    const user = auth2.currentUser.get();
-    const resp = user.getAuthResponse(true); // true => may refresh
-    if (resp && resp.access_token){
-      gdriveToken = resp.access_token;
-      return true;
-    }
-    // fallback: explicit reload
-    const r = await user.reloadAuthResponse();
-    if (r && r.access_token){
-      gdriveToken = r.access_token;
-      return true;
-    }
-  }catch(e){}
-  return false;
+// ── load saved config ──
+(function initDriveConfig(){
+  try {
+    driveApiKey   = localStorage.getItem('rp_apikey')  || '';
+    driveClientId = localStorage.getItem('rp_clientid')|| '';
+    driveFileId   = localStorage.getItem('rp_fileid')  || null;
+  } catch(e){}
+  if(driveApiKey && driveClientId) driveInit();
+})();
+
+function saveConfig(){
+  driveApiKey   = (document.getElementById('cfg-apikey').value   || '').trim();
+  driveClientId = (document.getElementById('cfg-clientid').value || '').trim();
+  if(!driveApiKey || !driveClientId){ setSyncStatus('err','Paste both API key and Client ID.'); return; }
+  try {
+    localStorage.setItem('rp_apikey',  driveApiKey);
+    localStorage.setItem('rp_clientid',driveClientId);
+  } catch(e){}
+  document.getElementById('sync-setup').classList.remove('show');
+  document.getElementById('btn-drive-setup').style.display = 'none';
+  driveInit();
 }
 
-async function gdriveFetch(url, opts={}, retry=true){
-  // Wrapper to auto-retry once on 401 by refreshing token
-  const res = await fetch(url, opts);
-  if (res.status === 401 && retry){
-    const ok = await gdriveEnsureToken();
-    if (ok){
-      const opts2 = structuredClone ? structuredClone(opts) : JSON.parse(JSON.stringify(opts || {}));
-      opts2.headers = Object.assign({}, (opts.headers||{}), { Authorization:'Bearer '+gdriveToken });
-      return fetch(url, opts2);
-    }
+function toggleSetup(){
+  const el = document.getElementById('sync-setup');
+  el.classList.toggle('show');
+  if(el.classList.contains('show')){
+    document.getElementById('cfg-apikey').value   = driveApiKey;
+    document.getElementById('cfg-clientid').value = driveClientId;
   }
-  return res;
 }
-function gdriveReady(){
-  // Called after gapi loads
-  gapi.load('auth2', () => {
-    gapi.auth2.init({ client_id: GDRIVE_CLIENT_ID, scope: GDRIVE_SCOPE }).then(auth2 => {
-      if(auth2.isSignedIn.get()){
-        gdriveToken = auth2.currentUser.get().getAuthResponse().access_token;
-        gdriveSetStatus('connected');
-        gdriveAutoLoad();
+
+function driveInit(){
+  setSyncStatus('info','Connecting to Google Drive…');
+  gapi.load('client:picker', () => {
+    gapi.client.init({ apiKey: driveApiKey, discoveryDocs:['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] })
+      .then(() => {
+        driveReady = true;
+        driveRequestToken(/*silent*/true);
+      })
+      .catch(err => setSyncStatus('err', 'Drive init error: ' + (err.message||err.error?.message||JSON.stringify(err))));
+  });
+}
+
+function driveRequestToken(silent){
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: driveClientId,
+    scope: DRIVE_SCOPES,
+    prompt: silent ? 'none' : '',
+    callback: resp => {
+      if(resp.error){ 
+        if(silent){ setSyncStatus('idle'); } 
+        else { setSyncStatus('err','Auth failed: '+resp.error); }
+        return; 
       }
-    }).catch(()=>{});
+      driveToken    = resp.access_token;
+      driveTokenExp = Date.now() + (resp.expires_in - 30) * 1000;
+      setSyncStatus('ok','Google Drive connected. Use Save/Load to sync.');
+      document.getElementById('btn-drive-save').disabled = false;
+      document.getElementById('btn-drive-load').disabled = false;
+    }
+  });
+  client.requestAccessToken({ prompt: silent ? 'none' : '' });
+}
+
+function ensureToken(cb){
+  if(driveToken && Date.now() < driveTokenExp){ cb(); return; }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: driveClientId,
+    scope: DRIVE_SCOPES,
+    prompt: '',
+    callback: resp => {
+      if(resp.error){ setSyncStatus('err','Sign-in failed: '+resp.error); return; }
+      driveToken    = resp.access_token;
+      driveTokenExp = Date.now() + (resp.expires_in - 30) * 1000;
+      cb();
+    }
+  });
+  client.requestAccessToken({ prompt: '' });
+}
+
+// ── SAVE ──
+async function driveSave(){
+  if(!driveReady || !driveApiKey){ setSyncStatus('err','Complete setup first (⚙ Setup).'); return; }
+  ensureToken(async () => {
+    setSyncStatus('info','Saving to Drive…');
+    disableDriveBtns(true);
+    try {
+      const body = JSON.stringify({ active: activeSessions, history: loadHistory(), savedAt: new Date().toISOString() }, null, 2);
+      if(driveFileId){
+        // Update existing file
+        await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,{
+          method:'PATCH',
+          headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' },
+          body
+        });
+      } else {
+        // Create new file in Drive root
+        const meta = await (await fetch('https://www.googleapis.com/drive/v3/files',{
+          method:'POST',
+          headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' },
+          body: JSON.stringify({ name: RPDATA_NAME, mimeType:'application/json' })
+        })).json();
+        driveFileId = meta.id;
+        try{ localStorage.setItem('rp_fileid', driveFileId); }catch(e){}
+        await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,{
+          method:'PATCH',
+          headers:{ Authorization:'Bearer '+driveToken, 'Content-Type':'application/json' },
+          body
+        });
+      }
+      setSyncStatus('ok','✓ Saved to Google Drive ('+ new Date().toLocaleTimeString() +')');
+    } catch(e){ setSyncStatus('err','Save failed: '+e.message); }
+    disableDriveBtns(false);
   });
 }
 
-function gdriveSignIn(){
-  if(!GDRIVE_CLIENT_ID || GDRIVE_CLIENT_ID==='YOUR_CLIENT_ID_HERE'){
-    alert('Set your Google OAuth Client ID in the GDRIVE_CLIENT_ID constant at the top of the script section. See instructions in the code comments.');
-    return;
-  }
-  gapi.auth2.getAuthInstance().signIn().then(user => {
-    gdriveToken = user.getAuthResponse().access_token;
-    gdriveSetStatus('connected');
-    gdriveAutoLoad();
-  }).catch(err=>{ gdriveSetStatus('error','Sign-in failed: '+err.error); });
-}
-
-function gdriveSignOut(){
-  gapi.auth2.getAuthInstance().signOut().then(()=>{
-    gdriveToken=null; gdriveFileId=null;
-    gdriveSetStatus('disconnected');
+// ── LOAD via Picker ──
+function driveLoad(){
+  if(!driveReady || !driveApiKey){ setSyncStatus('err','Complete setup first (⚙ Setup).'); return; }
+  ensureToken(() => {
+    const picker = new google.picker.PickerBuilder()
+      .addView(new google.picker.DocsView(google.picker.ViewId.DOCS)
+        .setMimeTypes('application/json')
+        .setQuery('readpace'))
+      .setOAuthToken(driveToken)
+      .setDeveloperKey(driveApiKey)
+      .setCallback(pickerCallback)
+      .setTitle('Choose your ReadPace data file')
+      .build();
+    picker.setVisible(true);
   });
 }
 
-function gdriveSetStatus(state, msg){
-  const st=document.getElementById('gdrive-status');
-  const authBtn=document.getElementById('gdrive-auth-btn');
-  const saveBtn=document.getElementById('gdrive-save-btn');
-  const loadBtn=document.getElementById('gdrive-load-btn');
-  const outBtn=document.getElementById('gdrive-signout-btn');
-  document.getElementById('gdrive-icon').textContent = state==='connected'?'✅':state==='syncing'?'🔄':state==='error'?'⚠️':'☁️';
-  if(state==='connected'){
-    st.textContent='Google Drive connected. Data syncs to your appdata folder.';
-    st.className='gdrive-status ok';
-    authBtn.style.display='none'; saveBtn.style.display=''; loadBtn.style.display=''; outBtn.style.display='';
-  } else if(state==='syncing'){
-    st.textContent=msg||'Syncing…'; st.className='gdrive-status';
-    saveBtn.disabled=true; loadBtn.disabled=true;
-  } else if(state==='saved'){
-    st.textContent='✓ Saved to Google Drive'; st.className='gdrive-status ok';
-    saveBtn.disabled=false; loadBtn.disabled=false;
-    setTimeout(()=>{ if(gdriveToken) gdriveSetStatus('connected'); },2500);
-  } else if(state==='loaded'){
-    st.textContent='✓ Loaded from Google Drive'; st.className='gdrive-status ok';
-    saveBtn.disabled=false; loadBtn.disabled=false;
-    setTimeout(()=>{ if(gdriveToken) gdriveSetStatus('connected'); },2500);
-  } else if(state==='error'){
-    st.textContent='⚠️ '+(msg||'Drive error'); st.className='gdrive-status err';
-    saveBtn.disabled=false; loadBtn.disabled=false;
-  } else {
-    st.textContent='Connect Google Drive to sync your data across devices.'; st.className='gdrive-status';
-    authBtn.style.display=''; saveBtn.style.display='none'; loadBtn.style.display='none'; outBtn.style.display='none';
-  }
-}
-
-async function gdriveFindFile(){
-  const q = encodeURIComponent(`name='${GDRIVE_FILENAME}'`);
-  const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)`;
-  const res = await gdriveFetch(url, { headers:{ Authorization:'Bearer '+gdriveToken } });
-  const data = await res.json();
-  return data.files && data.files.length ? data.files[0].id : null;
-}
-
-async function gdriveSaveNow(silent=false){
-  if(!gdriveToken){
-    if(!silent) alert('Not connected to Google Drive.');
-    return;
-  }
-
-  // don't spam status text for background autosaves unless you want it
-  if(!silent) gdriveSetStatus('syncing','Saving…');
-
-  try {
-    const payloadObj = {
-      lastModified: getLocalLastModified() || Date.now(),
-      active: activeSessions,
-      history: loadHistory()
-    };
-    const payload = JSON.stringify(payloadObj);
-
-    const fileId = gdriveFileId || await gdriveFindFile();
-
-    let url, method;
-    if(fileId){
-      gdriveFileId = fileId;
-      url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`;
-      method = 'PATCH';
-    } else {
-      // create metadata
-      const metaRes = await gdriveFetch('https://www.googleapis.com/drive/v3/files',{
-        method:'POST',
-        headers:{ Authorization:'Bearer '+gdriveToken,'Content-Type':'application/json' },
-        body: JSON.stringify({ name:GDRIVE_FILENAME, parents:['appDataFolder'] })
-      });
-      const mj = await metaRes.json();
-      gdriveFileId = mj.id;
-      url = `https://www.googleapis.com/upload/drive/v3/files/${gdriveFileId}?uploadType=media`;
-      method = 'PATCH';
-    }
-
-    const upRes = await gdriveFetch(url,{
-      method,
-      headers:{ Authorization:'Bearer '+gdriveToken,'Content-Type':'application/json' },
-      body: payload
-    });
-
-    if(!upRes.ok){
-      const t = await upRes.text().catch(()=> '');
-      throw new Error(`HTTP ${upRes.status} ${t}`.slice(0,180));
-    }
-
-    driveDirty = false;
-
-    if(!silent) gdriveSetStatus('saved');
-  } catch(e){
-    if(!silent) gdriveSetStatus('error','Save failed: '+e.message);
-  }
-}
-
-async function gdriveLoadNow(){
-  if(!gdriveToken){ alert('Not connected to Google Drive.'); return; }
-  gdriveSetStatus('syncing','Loading…');
-  try {
-    const fileId = gdriveFileId || await gdriveFindFile();
-    if(!fileId){ gdriveSetStatus('error','No saved data found on Drive.'); return; }
-    gdriveFileId=fileId;
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers:{ Authorization:'Bearer '+gdriveToken } });
-        const data = await res.json();
-
-        // Conflict logic: keep newer data
-        const localLM = getLocalLastModified();
-        const driveLM = Number(data.lastModified || 0);
-
-        if (driveLM && localLM && localLM > driveLM) {
-          // Local is newer: keep local, push local up
-          gdriveSetStatus('connected','Local data is newer; keeping local and syncing up…');
-          scheduleDriveSave();
-          return;
-        }
-
-        suppressDirty = true;
-        if(data.active){
-          activeSessions = data.active;
-          activeSessions.forEach(s=>{ s.status='paused'; });
-          saveActive();
-        }
-        if(data.history){
-          saveHistory(data.history);
-        }
-        setLocalLastModified(driveLM || Date.now());
-        suppressDirty = false;
-
-        renderShelf(); renderHistory();
-        gdriveSetStatus('loaded');
-  } catch(e){ gdriveSetStatus('error','Load failed: '+e.message); }
-}
-
-async function gdriveAutoLoad(){
-  // On connect, automatically load the latest data from Drive
-  gdriveSetStatus('syncing','Loading your data…');
-  try {
-    const fileId = await gdriveFindFile();
-    if(!fileId){ gdriveSetStatus('connected'); return; }
-    gdriveFileId=fileId;
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers:{ Authorization:'Bearer '+gdriveToken } });
-    const data = await res.json();
-
-    const localLM = getLocalLastModified();
-    const driveLM = Number(data.lastModified || 0);
-
-    if (driveLM && localLM && localLM > driveLM) {
-      // local newer, don't overwrite
-      gdriveSetStatus('connected','Local data is newer; syncing up…');
-      scheduleDriveSave();
-      return;
-    }
-
-    suppressDirty = true;
-    if(data.active){
-      activeSessions = data.active;
-      activeSessions.forEach(s=>{ s.status='paused'; });
+function pickerCallback(data){
+  if(data.action !== google.picker.Action.PICKED) return;
+  const file = data.docs[0];
+  driveFileId = file.id;
+  try{ localStorage.setItem('rp_fileid', driveFileId); }catch(e){}
+  setSyncStatus('info','Loading from Drive…');
+  disableDriveBtns(true);
+  fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`,{
+    headers:{ Authorization:'Bearer '+driveToken }
+  })
+  .then(r => r.json())
+  .then(d => {
+    if(d.active && Array.isArray(d.active)){
+      activeSessions = d.active;
+      activeSessions.forEach(s => { s.status = 'paused'; });
       saveActive();
     }
-    if(data.history){
-      saveHistory(data.history);
-    }
-    setLocalLastModified(driveLM || Date.now());
-    suppressDirty = false;
+    if(d.history && Array.isArray(d.history)) saveHistory(d.history);
+    renderShelf(); 
+    try{ renderHistory(); }catch(e){}
+    setSyncStatus('ok','✓ Loaded from Google Drive ('+ new Date().toLocaleTimeString() +')');
+  })
+  .catch(e => setSyncStatus('err','Load failed: '+e.message))
+  .finally(() => disableDriveBtns(false));
+}
 
-    renderShelf();
-    gdriveSetStatus('loaded');
-  } catch(e){
-    suppressDirty = false;
-    gdriveSetStatus('connected');
+function setSyncStatus(type, msg){
+  const lbl  = document.getElementById('sync-label');
+  const icon = document.getElementById('sync-icon');
+  if(type==='ok'){   lbl.className='sync-label ok';  icon.textContent='✅'; }
+  else if(type==='err'){ lbl.className='sync-label err'; icon.textContent='⚠️'; }
+  else if(type==='info'){ lbl.className='sync-label'; icon.textContent='🔄'; }
+  else { lbl.className='sync-label'; icon.textContent='☁️'; }
+  if(msg) lbl.textContent = msg;
+}
+
+function disableDriveBtns(on){
+  document.getElementById('btn-drive-save').disabled = on;
+  document.getElementById('btn-drive-load').disabled = on;
+}
+
+function setSyncLabel(msg, ok){
+  setSyncStatus(ok?'ok':'err', msg);
+  setTimeout(() => setSyncStatus('ok', 'Google Drive connected.'), 4000);
+}
+
+function setSyncIdle(){
+  setSyncStatus('idle','Sync with Google Drive — pick a file to load, or save your data.');
 }
 
 
@@ -1278,6 +1200,7 @@ function hideError(){ document.getElementById('error-msg').classList.remove('sho
 function flash(id){ const el=document.getElementById(id); el.style.borderColor='var(--red)'; setTimeout(()=>el.style.borderColor='',1200); }
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://apis.google.com/js/api.js" onload="gapi.load('client:auth2', gdriveReady)" async defer></script>
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>
