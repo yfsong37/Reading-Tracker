@@ -495,12 +495,58 @@ activeSessions.forEach(s => { s.status = 'paused'; });
 saveActive();
 renderShelf();
 checkA2HS();
+// allow autosave after initial boot paint
+setTimeout(() => { suppressDirty = false; }, 0);
+
+// save when backgrounding/closing (mobile Safari kills tabs aggressively)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && driveDirty && gdriveToken) gdriveSaveNow(true);
+});
+window.addEventListener('pagehide', () => {
+  if (driveDirty && gdriveToken) gdriveSaveNow(true);
+});
 
 // ── PERSIST (localStorage as fast cache; GDrive as source of truth) ──
-function saveActive(){ try{localStorage.setItem('rp_active',JSON.stringify(activeSessions));}catch(e){} }
-function loadActive(){ try{return JSON.parse(localStorage.getItem('rp_active')||'[]');}catch(e){return[];} }
-function saveHistory(h){ try{localStorage.setItem('rp_history',JSON.stringify(h.slice(0,200)));}catch(e){} }
-function loadHistory(){ try{return JSON.parse(localStorage.getItem('rp_history')||'[]');}catch(e){return[];} }
+// ── PERSIST (localStorage as fast cache; GDrive as source of truth) ──
+let suppressDirty = true;                 // prevents autosave during boot/load
+let driveDirty = false;
+let driveSaveTimer = null;
+const DRIVE_DEBOUNCE_MS = 1200;
+
+function getLocalLastModified(){
+  return Number(localStorage.getItem('rp_lastModified') || '0');
+}
+function setLocalLastModified(ts){
+  try { localStorage.setItem('rp_lastModified', String(ts)); } catch(e){}
+}
+function markDirty(){
+  if (suppressDirty) return;
+  driveDirty = true;
+  setLocalLastModified(Date.now());
+  scheduleDriveSave();
+}
+function scheduleDriveSave(){
+  if (!gdriveToken) return;           // only autosave when connected
+  clearTimeout(driveSaveTimer);
+  driveSaveTimer = setTimeout(() => {
+    if (driveDirty && gdriveToken) gdriveSaveNow(true); // silent autosave
+  }, DRIVE_DEBOUNCE_MS);
+}
+
+function saveActive(){
+  try { localStorage.setItem('rp_active', JSON.stringify(activeSessions)); } catch(e){}
+  markDirty();
+}
+function loadActive(){
+  try { return JSON.parse(localStorage.getItem('rp_active') || '[]'); } catch(e){ return []; }
+}
+function saveHistory(h){
+  try { localStorage.setItem('rp_history', JSON.stringify(h.slice(0,200))); } catch(e){}
+  markDirty();
+}
+function loadHistory(){
+  try { return JSON.parse(localStorage.getItem('rp_history') || '[]'); } catch(e){ return []; }
+}
 
 // ── GOOGLE DRIVE INTEGRATION ──
 // Replace YOUR_CLIENT_ID below with your OAuth 2.0 client ID from Google Cloud Console.
@@ -513,6 +559,40 @@ const GDRIVE_FILENAME  = 'readpace_data.json';
 let gdriveToken   = null;
 let gdriveFileId  = null;
 
+async function gdriveEnsureToken(){
+  // Refresh access token if possible (auth2)
+  try{
+    const auth2 = gapi.auth2 && gapi.auth2.getAuthInstance ? gapi.auth2.getAuthInstance() : null;
+    if (!auth2 || !auth2.isSignedIn.get()) return false;
+    const user = auth2.currentUser.get();
+    const resp = user.getAuthResponse(true); // true => may refresh
+    if (resp && resp.access_token){
+      gdriveToken = resp.access_token;
+      return true;
+    }
+    // fallback: explicit reload
+    const r = await user.reloadAuthResponse();
+    if (r && r.access_token){
+      gdriveToken = r.access_token;
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+async function gdriveFetch(url, opts={}, retry=true){
+  // Wrapper to auto-retry once on 401 by refreshing token
+  const res = await fetch(url, opts);
+  if (res.status === 401 && retry){
+    const ok = await gdriveEnsureToken();
+    if (ok){
+      const opts2 = structuredClone ? structuredClone(opts) : JSON.parse(JSON.stringify(opts || {}));
+      opts2.headers = Object.assign({}, (opts.headers||{}), { Authorization:'Bearer '+gdriveToken });
+      return fetch(url, opts2);
+    }
+  }
+  return res;
+}
 function gdriveReady(){
   // Called after gapi loads
   gapi.load('auth2', () => {
@@ -577,38 +657,67 @@ function gdriveSetStatus(state, msg){
 }
 
 async function gdriveFindFile(){
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${GDRIVE_FILENAME}'&fields=files(id)`,
-    { headers:{ Authorization:'Bearer '+gdriveToken } }
-  );
+  const q = encodeURIComponent(`name='${GDRIVE_FILENAME}'`);
+  const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)`;
+  const res = await gdriveFetch(url, { headers:{ Authorization:'Bearer '+gdriveToken } });
   const data = await res.json();
-  return data.files&&data.files.length ? data.files[0].id : null;
+  return data.files && data.files.length ? data.files[0].id : null;
 }
 
-async function gdriveSaveNow(){
-  if(!gdriveToken){ alert('Not connected to Google Drive.'); return; }
-  gdriveSetStatus('syncing','Saving…');
+async function gdriveSaveNow(silent=false){
+  if(!gdriveToken){
+    if(!silent) alert('Not connected to Google Drive.');
+    return;
+  }
+
+  // don't spam status text for background autosaves unless you want it
+  if(!silent) gdriveSetStatus('syncing','Saving…');
+
   try {
-    const payload = JSON.stringify({ active: activeSessions, history: loadHistory() });
+    const payloadObj = {
+      lastModified: getLocalLastModified() || Date.now(),
+      active: activeSessions,
+      history: loadHistory()
+    };
+    const payload = JSON.stringify(payloadObj);
+
     const fileId = gdriveFileId || await gdriveFindFile();
+
     let url, method;
     if(fileId){
-      gdriveFileId=fileId;
-      url=`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`;
-      method='PATCH';
+      gdriveFileId = fileId;
+      url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`;
+      method = 'PATCH';
     } else {
-      // Create with metadata first
-      const meta = await fetch('https://www.googleapis.com/drive/v3/files',{
-        method:'POST', headers:{ Authorization:'Bearer '+gdriveToken,'Content-Type':'application/json' },
+      // create metadata
+      const metaRes = await gdriveFetch('https://www.googleapis.com/drive/v3/files',{
+        method:'POST',
+        headers:{ Authorization:'Bearer '+gdriveToken,'Content-Type':'application/json' },
         body: JSON.stringify({ name:GDRIVE_FILENAME, parents:['appDataFolder'] })
       });
-      const mj = await meta.json(); gdriveFileId=mj.id;
-      url=`https://www.googleapis.com/upload/drive/v3/files/${gdriveFileId}?uploadType=media`;
-      method='PATCH';
+      const mj = await metaRes.json();
+      gdriveFileId = mj.id;
+      url = `https://www.googleapis.com/upload/drive/v3/files/${gdriveFileId}?uploadType=media`;
+      method = 'PATCH';
     }
-    await fetch(url,{ method, headers:{ Authorization:'Bearer '+gdriveToken,'Content-Type':'application/json' }, body:payload });
-    gdriveSetStatus('saved');
-  } catch(e){ gdriveSetStatus('error','Save failed: '+e.message); }
+
+    const upRes = await gdriveFetch(url,{
+      method,
+      headers:{ Authorization:'Bearer '+gdriveToken,'Content-Type':'application/json' },
+      body: payload
+    });
+
+    if(!upRes.ok){
+      const t = await upRes.text().catch(()=> '');
+      throw new Error(`HTTP ${upRes.status} ${t}`.slice(0,180));
+    }
+
+    driveDirty = false;
+
+    if(!silent) gdriveSetStatus('saved');
+  } catch(e){
+    if(!silent) gdriveSetStatus('error','Save failed: '+e.message);
+  }
 }
 
 async function gdriveLoadNow(){
@@ -620,11 +729,33 @@ async function gdriveLoadNow(){
     gdriveFileId=fileId;
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       { headers:{ Authorization:'Bearer '+gdriveToken } });
-    const data = await res.json();
-    if(data.active){ activeSessions=data.active; activeSessions.forEach(s=>{s.status='paused';}); saveActive(); }
-    if(data.history){ saveHistory(data.history); }
-    renderShelf(); renderHistory();
-    gdriveSetStatus('loaded');
+        const data = await res.json();
+
+        // Conflict logic: keep newer data
+        const localLM = getLocalLastModified();
+        const driveLM = Number(data.lastModified || 0);
+
+        if (driveLM && localLM && localLM > driveLM) {
+          // Local is newer: keep local, push local up
+          gdriveSetStatus('connected','Local data is newer; keeping local and syncing up…');
+          scheduleDriveSave();
+          return;
+        }
+
+        suppressDirty = true;
+        if(data.active){
+          activeSessions = data.active;
+          activeSessions.forEach(s=>{ s.status='paused'; });
+          saveActive();
+        }
+        if(data.history){
+          saveHistory(data.history);
+        }
+        setLocalLastModified(driveLM || Date.now());
+        suppressDirty = false;
+
+        renderShelf(); renderHistory();
+        gdriveSetStatus('loaded');
   } catch(e){ gdriveSetStatus('error','Load failed: '+e.message); }
 }
 
@@ -638,11 +769,34 @@ async function gdriveAutoLoad(){
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       { headers:{ Authorization:'Bearer '+gdriveToken } });
     const data = await res.json();
-    if(data.active){ activeSessions=data.active; activeSessions.forEach(s=>{s.status='paused';}); saveActive(); }
-    if(data.history){ saveHistory(data.history); }
+
+    const localLM = getLocalLastModified();
+    const driveLM = Number(data.lastModified || 0);
+
+    if (driveLM && localLM && localLM > driveLM) {
+      // local newer, don't overwrite
+      gdriveSetStatus('connected','Local data is newer; syncing up…');
+      scheduleDriveSave();
+      return;
+    }
+
+    suppressDirty = true;
+    if(data.active){
+      activeSessions = data.active;
+      activeSessions.forEach(s=>{ s.status='paused'; });
+      saveActive();
+    }
+    if(data.history){
+      saveHistory(data.history);
+    }
+    setLocalLastModified(driveLM || Date.now());
+    suppressDirty = false;
+
     renderShelf();
     gdriveSetStatus('loaded');
-  } catch(e){ gdriveSetStatus('connected'); }
+  } catch(e){
+    suppressDirty = false;
+    gdriveSetStatus('connected');
 }
 
 
