@@ -568,7 +568,12 @@ function driveAutoLoad(){
     fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
       headers:{ Authorization:'Bearer '+driveToken }
     })
-    .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(r => {
+      const ct = r.headers.get('content-type')||'';
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      if(!ct.includes('json') && !ct.includes('octet')) throw new Error('Not JSON: '+ct);
+      return r.json();
+    })
     .then(d => {
       if(d.active   && Array.isArray(d.active))  { activeSessions=d.active; activeSessions.forEach(s=>{s.status='paused';}); try{localStorage.setItem('rp_active',JSON.stringify(activeSessions));}catch(e){} }
       if(d.history  && Array.isArray(d.history)) { try{localStorage.setItem('rp_history',JSON.stringify(d.history.slice(0,200)));}catch(e){} }
@@ -710,8 +715,25 @@ function pickerCallback(data){
   driveFileId = data.docs[0].id;
   try{ localStorage.setItem('rp_fileid', driveFileId); }catch(e){}
   setSyncStatus('info','Loading from Google Drive…');
-  fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, { headers:{ Authorization:'Bearer '+driveToken } })
-  .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+  // Always get a fresh token here — the Picker uses its own auth session
+  // and the token we held may be expired or mismatched.
+  driveToken = null;
+  ensureToken(() => fetchDriveFile(), false);
+}
+
+function fetchDriveFile(){
+  const timeout = new Promise((_,rej) => setTimeout(()=>rej(new Error('Request timed out after 15s')), 15000));
+  const request = fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
+    headers:{ Authorization:'Bearer '+driveToken }
+  })
+  .then(r => {
+    // Check content-type — a 200 HTML error page would otherwise silently hang
+    const ct = r.headers.get('content-type')||'';
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(!ct.includes('json') && !ct.includes('octet')) throw new Error('Unexpected response type: '+ct);
+    return r.json();
+  });
+  Promise.race([request, timeout])
   .then(d => {
     if(d.active  && Array.isArray(d.active))  { activeSessions=d.active; activeSessions.forEach(s=>{s.status='paused';}); try{localStorage.setItem('rp_active',JSON.stringify(activeSessions));}catch(e){} }
     if(d.history && Array.isArray(d.history)) { try{localStorage.setItem('rp_history',JSON.stringify(d.history.slice(0,200)));}catch(e){} }
