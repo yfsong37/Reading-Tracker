@@ -367,7 +367,10 @@ if __name__ == "__main__":
     <button class="skip-btn" id="skip-btn" onclick="skipChapter()">⏭ Skip</button>
   </div>
   <div id="laps-section" class="laps-section" style="display:none">
-    <span class="section-label">Completed Chapters</span>
+    <div class="shelf-header" style="margin-bottom:10px">
+      <span class="section-label" style="margin-bottom:0">Completed Chapters</span>
+      <button class="shelf-add" onclick="exportReadingTimes()">📋 Export</button>
+    </div>
     <div class="table-card">
       <div class="table-header"><span>Chapter</span><span style="text-align:right">Time</span><span style="text-align:right">WPM</span></div>
       <div id="laps-body"></div>
@@ -494,8 +497,26 @@ if __name__ == "__main__":
   <div class="modal-sub" id="detail-sub"></div>
   <div class="stats-trio" id="detail-stats" style="margin-bottom:14px"></div>
   <div class="highlights" id="detail-highlights" style="margin-bottom:14px"></div>
-  <span class="section-label">Chapters</span>
+  <div class="shelf-header" style="margin-bottom:10px">
+    <span class="section-label" style="margin-bottom:0">Chapters</span>
+    <button class="shelf-add" onclick="exportHistoryTimes()">📋 Export</button>
+  </div>
   <div class="table-card"><div class="table-header"><span>Chapter</span><span style="text-align:right">Time</span><span style="text-align:right">WPM</span></div><div id="detail-laps"></div></div>
+</div>
+</div>
+
+<!-- EXPORT TIMES MODAL -->
+<div class="modal-overlay" id="export-modal" onclick="closeExportModal(event)">
+<div class="modal-sheet">
+  <div class="modal-handle"></div>
+  <div class="modal-title">Export Chapter Times</div>
+  <div class="modal-sub">One row per chapter, in order · paste into columns F/G starting at Chapter 1's row · skipped chapters are left blank</div>
+  <textarea id="export-textarea" class="code-block" style="width:100%;min-height:160px;resize:vertical;font-size:12px" readonly onclick="this.select()"></textarea>
+  <div id="export-copied" style="font-size:12px;color:var(--green);text-align:center;margin-bottom:8px;min-height:16px"></div>
+  <div class="btn-row">
+    <button class="btn btn-ghost" onclick="closeExportModal()">Done</button>
+    <button class="btn btn-primary" onclick="copyExportText()">📋 Copy to Clipboard</button>
+  </div>
 </div>
 </div>
 
@@ -509,6 +530,7 @@ let timerInterval  = null;
 let lastTick       = null;
 let lapTimeOpt     = 'timer';
 let editLapIdx     = null;
+let detailLaps      = null;
 
 // ── BOOT ──
 activeSessions = loadActive();
@@ -1266,9 +1288,41 @@ function openDetail(id){
     const c=l.wpm===mx?'var(--green)':l.wpm===mn?'var(--red)':'var(--gold)';
     return `<div class="table-row" style="cursor:default"><span class="row-name">${esc(l.title)}</span><span class="row-time">${formatTime(l.seconds)}</span><span class="row-wpm" style="color:${c}">${Math.round(l.wpm)}</span></div>`;
   }).join('');
+  detailLaps=s.laps;
   document.getElementById('detail-modal').classList.add('open');
 }
 function closeDetailModal(e){ if(e&&e.target!==document.getElementById('detail-modal')) return; document.getElementById('detail-modal').classList.remove('open'); }
+
+// ── EXPORT CHAPTER TIMES (copy-paste into the personal Excel tracker's Minutes/Seconds columns) ──
+function exportReadingTimes(){ const s=getOpen(); if(s) openExportModal(s.laps); }
+function exportHistoryTimes(){ if(detailLaps) openExportModal(detailLaps); }
+
+function openExportModal(laps){
+  const text = laps.map(l=>{
+    if(l.skipped) return '\t';
+    const total=Math.round(l.seconds), m=Math.floor(total/60), s=total%60;
+    return `${m}\t${s}`;
+  }).join('\n');
+  document.getElementById('export-textarea').value = text;
+  document.getElementById('export-copied').textContent = '';
+  document.getElementById('export-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('export-textarea').select(), 60);
+}
+
+function copyExportText(){
+  const ta = document.getElementById('export-textarea');
+  ta.select();
+  const done = () => { document.getElementById('export-copied').textContent = '✓ Copied'; };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(ta.value).then(done).catch(() => {
+      try{ document.execCommand('copy'); done(); }catch(e){}
+    });
+  } else {
+    try{ document.execCommand('copy'); done(); }catch(e){}
+  }
+}
+
+function closeExportModal(e){ if(e&&e.target!==document.getElementById('export-modal')) return; document.getElementById('export-modal').classList.remove('open'); }
 
 // ── EPUB PARSER (fallback) ──
 async function parseEpub(file){
