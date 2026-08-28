@@ -210,6 +210,7 @@ body{font-family:'Lato',sans-serif;color:var(--cream);overscroll-behavior:none}
         <input id="cfg-apikey" class="time-input" style="font-size:13px;padding:9px 12px;margin:0;text-align:left" placeholder="API Key  (AIza…)">
         <input id="cfg-clientid" class="time-input" style="font-size:13px;padding:9px 12px;margin:0;text-align:left" placeholder="OAuth Client ID  (…apps.googleusercontent.com)">
         <button class="btn btn-primary" style="padding:10px" onclick="saveConfig()">Save Config &amp; Connect</button>
+        <button class="clear-btn" style="padding:2px 0;text-align:left" onclick="chooseDifferentFile()">📂 Choose a different Drive file…</button>
       </div>
     </div>
   </div>
@@ -221,7 +222,7 @@ body{font-family:'Lato',sans-serif;color:var(--cream);overscroll-behavior:none}
         <div class="import-sub">Tap to choose your .json chapter file</div>
       </div>
     </div>
-    <input type="file" id="file-input" accept=".json,.epub">
+    <input type="file" id="file-input" accept=".json,.epub" multiple>
     <div id="error-msg" class="error-msg"></div>
   </div>
   <div id="shelf-section" style="display:none">
@@ -677,6 +678,23 @@ async function driveUpload(body){
   }
 }
 
+// ── AUTO-SAVE at reading checkpoints (chapter/book finished, session ended,
+// paused, app backgrounded) ──
+// Only fires using an already-valid token — never prompts an interactive
+// sign-in on its own, so it's silent by design. If the token has expired,
+// this is a no-op and you'll need to hit 📂/💾 manually (or it'll pick back
+// up automatically next time you use a manual button and refresh the token).
+let driveAutoSaving = false;
+function driveAutoSave(){
+  if(driveAutoSaving) return;
+  if(!driveConnected || !driveApiKey || !driveToken || Date.now() >= driveTokenExp) return;
+  driveAutoSaving = true;
+  driveUpload(JSON.stringify({ active:activeSessions, history:loadHistory(), savedAt:new Date().toISOString() }, null, 2))
+    .then(() => setSyncStatus('ok', '✓ Auto-saved · '+new Date().toLocaleTimeString()))
+    .catch(e => setSyncStatus('err', 'Auto-save failed: '+e.message))
+    .finally(() => { driveAutoSaving = false; });
+}
+
 // ── MANUAL SAVE ──
 async function driveSave(){
   if(!driveApiKey){ setSyncStatus('err','Complete ⚙ Setup first.'); return; }
@@ -691,10 +709,28 @@ async function driveSave(){
   });
 }
 
-// ── MANUAL LOAD (Picker) ──
+// ── MANUAL LOAD ──
+// Once we know which Drive file to sync (driveFileId), just fetch it directly —
+// no need to make you pick it from the Picker UI every single time. The Picker
+// is only used for first-time setup or when you explicitly want to switch files.
 function driveLoad(){
   if(!driveApiKey){ setSyncStatus('err','Complete ⚙ Setup first.'); return; }
   disableDriveBtns(true);
+  if(driveFileId){
+    setSyncStatus('info','Loading from Google Drive…');
+    ensureToken(() => fetchDriveFile());
+    return;
+  }
+  driveLoadPicker();
+}
+
+function chooseDifferentFile(){
+  if(!driveApiKey){ setSyncStatus('err','Complete ⚙ Setup first.'); return; }
+  disableDriveBtns(true);
+  driveLoadPicker();
+}
+
+function driveLoadPicker(){
   ensureToken(() => {
     try {
       new google.picker.PickerBuilder()
@@ -754,62 +790,84 @@ function setSyncLabel(msg,ok){ setSyncStatus(ok?'ok':'err',msg); }
 
 
 
-// ── FILE INPUT ──
+// ── FILE INPUT (supports selecting/dropping multiple files at once) ──
 document.getElementById('file-input').addEventListener('change', e => {
-  const f = e.target.files[0]; if(f) loadFile(f); e.target.value='';
+  const files = [...e.target.files]; if(files.length) loadFiles(files); e.target.value='';
 });
 const ia = document.getElementById('import-area');
 ia.addEventListener('dragover', e => { e.preventDefault(); ia.classList.add('drag-over'); });
 ia.addEventListener('dragleave', () => ia.classList.remove('drag-over'));
-ia.addEventListener('drop', e => { e.preventDefault(); ia.classList.remove('drag-over'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+ia.addEventListener('drop', e => {
+  e.preventDefault(); ia.classList.remove('drag-over');
+  const files = [...e.dataTransfer.files]; if(files.length) loadFiles(files);
+});
 
-async function loadFile(file){
+// Only auto-jump into the reading screen when a single new book was imported —
+// batch imports just populate the shelf so you can review before opening one.
+async function loadFiles(files){
   hideError();
-  const n = file.name.toLowerCase();
-  if(n.endsWith('.json')) { readJSON(file); }
-  else if(n.endsWith('.epub')) { showImportLoading(true); try{ createSession(await parseEpub(file)); }catch(e){ showError(e.message); } showImportLoading(false); }
-  else showError('Please choose a .json or .epub file.');
+  showImportLoading(true);
+  const openAfter = files.length === 1;
+  const errors = [];
+  let added = 0;
+  for(const file of files){
+    const n = file.name.toLowerCase();
+    try{
+      if(n.endsWith('.json'))       { await readJSONFile(file, openAfter); added++; }
+      else if(n.endsWith('.epub'))  { createSession(await parseEpub(file), {openAfter}); added++; }
+      else throw new Error('not a .json or .epub file');
+    } catch(err){ errors.push(`${file.name}: ${err.message}`); }
+  }
+  showImportLoading(false);
+  if(errors.length) showError((added ? `Imported ${added} book${added>1?'s':''}. ` : '') + errors.join(' · '));
 }
 
-function readJSON(file){
-  const r = new FileReader();
-  r.onload = e => {
-    try {
-      const d = JSON.parse(e.target.result);
-      if(!d.chapters||!Array.isArray(d.chapters)||d.chapters.length===0)
-        throw new Error('JSON must have a "chapters" array with at least one entry.');
+function readJSONFile(file, openAfter){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = e => {
+      try {
+        const d = JSON.parse(e.target.result);
+        if(!d.chapters||!Array.isArray(d.chapters)||d.chapters.length===0)
+          throw new Error('JSON must have a "chapters" array with at least one entry.');
 
-      // Normalise chapters — accept both simple {title, wordCount} and the
-      // richer format {index, title, href, wordCount} produced by the advanced
-      // Python script.  Strip zero-word entries (front-matter stubs etc.).
-      const chapters = d.chapters
-        .map((c, i) => ({
-          title: (c.title || `Chapter ${i + 1}`).trim(),
-          wordCount: Number(c.wordCount) || 0
-        }))
-        .filter(c => c.wordCount > 0);
+        // Normalise chapters — accept both simple {title, wordCount} and the
+        // richer format {index, title, href, wordCount} produced by the advanced
+        // Python script.  Strip zero-word entries (front-matter stubs etc.).
+        const chapters = d.chapters
+          .map((c, i) => ({
+            title: (c.title || `Chapter ${i + 1}`).trim(),
+            wordCount: Number(c.wordCount) || 0
+          }))
+          .filter(c => c.wordCount > 0);
 
-      if(chapters.length === 0)
-        throw new Error('All chapters have 0 words — check the JSON file.');
+        if(chapters.length === 0)
+          throw new Error('All chapters have 0 words — check the JSON file.');
 
-      createSession({
-        title:   (d.title  || file.name.replace(/\.json$/i, '')).trim(),
-        author:  (d.author || 'Unknown').trim(),
-        chapters
-      });
-    } catch(err){ showError('JSON error: ' + err.message); }
-  };
-  r.readAsText(file);
+        createSession({
+          title:   (d.title  || file.name.replace(/\.json$/i, '')).trim(),
+          author:  (d.author || 'Unknown').trim(),
+          chapters
+        }, {openAfter});
+        resolve();
+      } catch(err){ reject(err); }
+    };
+    r.onerror = () => reject(new Error('could not read file.'));
+    r.readAsText(file);
+  });
 }
 
-function createSession(book){
-  if(activeSessions.find(s=>s.bookTitle===book.title)){ showError(`"${book.title}" is already in your shelf.`); return; }
-  const s = { id:Date.now(), bookTitle:book.title, bookAuthor:book.author, chapters:book.chapters, laps:[], chapterIdx:0, chapterElapsed:0, sessionElapsed:0, totalBookElapsed:0, status:'paused' };
+let sessionIdSeq = 0;
+function createSession(book, opts){
+  const openAfter = !opts || opts.openAfter !== false;
+  if(activeSessions.find(s=>s.bookTitle===book.title)) throw new Error(`"${book.title}" is already in your shelf.`);
+  const s = { id:Date.now()+(sessionIdSeq++), bookTitle:book.title, bookAuthor:book.author, chapters:book.chapters, laps:[], chapterIdx:0, chapterElapsed:0, sessionElapsed:0, totalBookElapsed:0, status:'paused', lastOpenedAt:0 };
   activeSessions.push(s);
   saveActive();
   hideImportSection();
   renderShelf();
-  openSession(s.id);
+  if(openAfter) openSession(s.id);
+  return s;
 }
 
 function showImportLoading(on){
@@ -827,7 +885,9 @@ function renderShelf(){
   if(activeSessions.length===0){ shelf.style.display='none'; document.getElementById('import-section').style.display='block'; document.getElementById('how-it-works').style.display='block'; return; }
   shelf.style.display='block';
   const cols=['#e2c97e','#a0855a','#7a9e7e','#7a8ea0','#a07a9e','#9e8a7a'];
-  body.innerHTML = activeSessions.map((s,i)=>{
+  // Most recently opened first; never-opened books fall back to creation time.
+  const sorted=[...activeSessions].sort((a,b)=>(b.lastOpenedAt||b.id||0)-(a.lastOpenedAt||a.id||0));
+  body.innerHTML = sorted.map((s,i)=>{
     const color=cols[i%cols.length];
     const sc=s.laps.filter(l=>!l.skipped), tw=sc.reduce((x,l)=>x+l.wordCount,0), tt=sc.reduce((x,l)=>x+l.seconds,0);
     const avg=tt>0?Math.round((tw/tt)*60):null;
@@ -872,6 +932,7 @@ function openSession(id){
   const s=activeSessions.find(s=>s.id===id); if(!s) return;
   openSessionId=id;
   s.status='running';
+  s.lastOpenedAt=Date.now();
   saveActive(); renderShelf();
   updateReadingUI(); rebuildLapsList();
   document.getElementById('tab-bar').style.display='none';
@@ -880,21 +941,47 @@ function openSession(id){
 }
 
 // ── TIMER ──
-function startTimer(){ stopTimer(); lastTick=Date.now(); timerInterval=setInterval(()=>{ const s=getOpen(); if(!s||s.status!=='running') return; const now=Date.now(), d=(now-lastTick)/1000; lastTick=now; s.chapterElapsed+=d; s.sessionElapsed+=d; updateTimerUI(); },100); }
+// Ticks update in-memory state every 100ms but only touch localStorage every
+// ~5s (saveTickCounter) — a full write every tick is wasteful. The real
+// safety net against losing progress is the visibilitychange/pagehide flush
+// below, which fires reliably when iOS backgrounds a home-screen web app
+// (unlike beforeunload, which standalone PWAs often never get).
+let saveTickCounter = 0;
+function startTimer(){
+  stopTimer(); lastTick=Date.now();
+  timerInterval=setInterval(()=>{
+    const s=getOpen(); if(!s||s.status!=='running') return;
+    const now=Date.now(), d=(now-lastTick)/1000; lastTick=now;
+    s.chapterElapsed+=d; s.sessionElapsed+=d;
+    updateTimerUI();
+    if(++saveTickCounter>=50){ saveTickCounter=0; saveActive(); }
+  },100);
+}
 function stopTimer(){ clearInterval(timerInterval); timerInterval=null; }
+
+// Flush the timer to localStorage the moment the app is backgrounded, and
+// reset the tick clock when it comes back so the backgrounded gap (during
+// which the interval was suspended by the OS) isn't miscounted as reading
+// time on the next tick.
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState==='hidden'){ saveActive(); driveAutoSave(); }
+  else if(document.visibilityState==='visible') lastTick=Date.now();
+});
+window.addEventListener('pagehide', () => saveActive());
 
 function togglePause(){
   const s=getOpen(); if(!s) return;
   s.status = s.status==='running' ? 'paused' : 'running';
   if(s.status==='running'){ lastTick=Date.now(); startTimer(); } else stopTimer();
   saveActive();
+  if(s.status==='paused') driveAutoSave();
   document.getElementById('pause-btn').textContent = s.status==='running'?'⏸ Pause':'▶ Resume';
   document.getElementById('timer-dot').className = 'dot'+(s.status==='running'?'':' paused');
   document.getElementById('timer-value').className = 'timer-value'+(s.status==='running'?'':' paused');
 }
 
 function endSession(){
-  const s=getOpen(); if(s){ s.status='paused'; s.totalBookElapsed=(s.totalBookElapsed||0)+s.sessionElapsed; s.sessionElapsed=0; stopTimer(); saveActive(); }
+  const s=getOpen(); if(s){ s.status='paused'; s.totalBookElapsed=(s.totalBookElapsed||0)+s.sessionElapsed; s.sessionElapsed=0; stopTimer(); saveActive(); driveAutoSave(); }
   openSessionId=null;
   document.getElementById('tab-bar').style.display='flex';
   renderShelf(); showScreen('home');
@@ -945,12 +1032,12 @@ function recordLap(s,seconds){
     const hist=loadHistory(); hist.unshift({ id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, finished:true });
     saveHistory(hist);
     activeSessions=activeSessions.filter(x=>x.id!==s.id);
-    openSessionId=null; saveActive(); renderShelf();
+    openSessionId=null; saveActive(); renderShelf(); driveAutoSave();
     showSummaryScreen(s);
     document.getElementById('tab-bar').style.display='flex';
   } else {
     s.chapterIdx++; s.chapterElapsed=0;
-    saveActive(); updateReadingUI(); rebuildLapsList();
+    saveActive(); driveAutoSave(); updateReadingUI(); rebuildLapsList();
   }
 }
 
@@ -963,7 +1050,7 @@ function finishBook(){
   const hist=loadHistory(); hist.unshift({ id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, finished:true });
   saveHistory(hist);
   activeSessions=activeSessions.filter(x=>x.id!==s.id);
-  openSessionId=null; saveActive(); renderShelf();
+  openSessionId=null; saveActive(); renderShelf(); driveAutoSave();
   showSummaryScreen(s);
   document.getElementById('tab-bar').style.display='flex';
 }
@@ -983,12 +1070,12 @@ function skipChapter(){
     const hist=loadHistory(); hist.unshift({ id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, finished:true });
     saveHistory(hist);
     activeSessions=activeSessions.filter(x=>x.id!==s.id);
-    openSessionId=null; saveActive(); renderShelf();
+    openSessionId=null; saveActive(); renderShelf(); driveAutoSave();
     showSummaryScreen(s);
     document.getElementById('tab-bar').style.display='flex';
   } else {
     s.chapterIdx++; s.chapterElapsed=0;
-    saveActive(); updateReadingUI(); rebuildLapsList();
+    saveActive(); driveAutoSave(); updateReadingUI(); rebuildLapsList();
   }
 }
 
