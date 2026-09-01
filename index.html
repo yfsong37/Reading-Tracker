@@ -177,6 +177,44 @@ body{font-family:'Lato',sans-serif;color:var(--cream);overscroll-behavior:none}
 .sync-setup.show{display:block}
 .sync-setup a{color:var(--gold-dim)}
 .sync-setup code{font-family:'JetBrains Mono',monospace;background:var(--surface);padding:1px 5px;border-radius:4px;font-size:10.5px}
+/* STATS */
+.stats-range{display:flex;gap:8px;margin-bottom:20px}
+.range-btn{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:9px;font-size:13px;font-weight:700;font-family:'Lato',sans-serif;cursor:pointer;transition:all .15s}
+.range-btn.active{background:var(--surface2);color:var(--gold);border-color:var(--gold-dim)}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 12px 12px;overflow-x:auto}
+.chart{display:flex;align-items:flex-end;gap:6px;min-height:180px;min-width:min-content}
+.chart-col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;flex:1;min-width:24px}
+.chart-stack{width:100%;max-width:32px;display:flex;flex-direction:column-reverse;border-radius:4px 4px 0 0;overflow:hidden;background:var(--surface2)}
+.chart-seg{width:100%;flex-shrink:0;min-height:0}
+.chart-val{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);min-height:12px}
+.chart-mlabel{font-size:9px;color:var(--muted);letter-spacing:.3px;white-space:nowrap}
+.chart-legend{display:flex;gap:14px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.rating-row{display:flex;align-items:center;gap:10px;padding:7px 0}
+.rating-lbl{font-size:12px;color:var(--muted);width:118px;flex-shrink:0}
+.rating-bar-track{flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.rating-bar{height:100%;border-radius:4px;transition:width .4s}
+.rating-count{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--cream);width:20px;text-align:right}
+/* DETAIL TAGS */
+.detail-tags{display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
+.dt-group{display:flex;flex-direction:column;gap:6px}
+.dt-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+.dt-btns{display:flex;gap:8px}
+.dt-btn{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:10px;font-size:13px;font-weight:700;font-family:'Lato',sans-serif;cursor:pointer;transition:all .15s}
+.dt-btn:active{transform:scale(.97)}
+#detail-cat-btns .dt-btn.active{background:rgba(96,165,250,.12);border-color:var(--blue);color:var(--cream)}
+#detail-rating-btns .dt-btn.r1.active{background:rgba(248,113,113,.15);border-color:var(--red);color:var(--red)}
+#detail-rating-btns .dt-btn.r2.active{background:rgba(226,201,126,.15);border-color:var(--gold);color:var(--gold)}
+#detail-rating-btns .dt-btn.r3.active{background:rgba(74,222,128,.15);border-color:var(--green);color:var(--green)}
+/* ALL CHAPTERS */
+.ch-row{display:grid;grid-template-columns:1fr 54px 68px;gap:8px;padding:11px 14px;border-top:1px solid var(--border);align-items:center}
+.ch-row:first-child{border-top:none}
+.ch-row.upcoming .row-name{color:var(--muted)}
+.ch-status{font-size:10px;padding:2px 7px;border-radius:8px;white-space:nowrap;text-transform:capitalize}
+.ch-status.done{background:rgba(74,222,128,.12);color:var(--green)}
+.ch-status.cur{background:rgba(226,201,126,.14);color:var(--gold)}
+.ch-status.next{background:var(--surface2);color:var(--muted)}
 </style>
 
 <!-- HOME -->
@@ -377,6 +415,16 @@ if __name__ == "__main__":
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Tap a row to edit time · tap a skipped row to un-skip</div>
   </div>
+  <div id="all-chapters-section" style="margin-top:14px">
+    <div class="shelf-header" style="margin-bottom:10px">
+      <span class="section-label" style="margin-bottom:0">All Chapters</span>
+      <button class="shelf-add" id="all-ch-toggle" onclick="toggleAllChapters()">Show all</button>
+    </div>
+    <div class="table-card" id="all-chapters-card" style="display:none">
+      <div class="table-header" style="grid-template-columns:1fr 54px 68px"><span>Chapter</span><span style="text-align:right">Words</span><span style="text-align:right">Status</span></div>
+      <div id="all-chapters-body"></div>
+    </div>
+  </div>
 </div>
 </div>
 
@@ -404,6 +452,29 @@ if __name__ == "__main__":
 </div>
 </div>
 
+<!-- STATS -->
+<div id="screen-stats" class="screen">
+<div class="inner">
+  <div class="screen-title" style="margin-bottom:18px">Stats</div>
+  <div class="stats-range" id="stats-range">
+    <button class="range-btn active" data-range="6" onclick="setStatsRange(6)">6 mo</button>
+    <button class="range-btn" data-range="12" onclick="setStatsRange(12)">12 mo</button>
+    <button class="range-btn" data-range="0" onclick="setStatsRange(0)">All</button>
+  </div>
+  <div id="stats-empty" class="empty-state" style="display:none"></div>
+  <div id="stats-content">
+    <span class="section-label">Books per month</span>
+    <div class="chart-card"><div class="chart" id="chart-books"></div></div>
+    <div class="chart-legend" id="stats-legend"></div>
+    <span class="section-label" style="margin-top:24px">Words per month</span>
+    <div class="chart-card"><div class="chart" id="chart-words"></div></div>
+    <span class="section-label" style="margin-top:24px">Ratings</span>
+    <div class="chart-card" id="ratings-card"></div>
+    <div class="stats-trio" id="stats-totals" style="margin-top:16px"></div>
+  </div>
+</div>
+</div>
+
 <!-- HISTORY -->
 <div id="screen-history" class="screen">
 <div class="inner">
@@ -418,6 +489,7 @@ if __name__ == "__main__":
 <!-- TAB BAR -->
 <div class="tab-bar" id="tab-bar">
   <button class="tab active" id="tab-read" onclick="switchTab('home')"><span class="tab-icon">📖</span><span class="tab-label">Read</span></button>
+  <button class="tab" id="tab-stats" onclick="switchTab('stats')"><span class="tab-icon">📊</span><span class="tab-label">Stats</span></button>
   <button class="tab" id="tab-history" onclick="switchTab('history')"><span class="tab-icon">🕐</span><span class="tab-label">History</span></button>
 </div>
 
@@ -495,6 +567,23 @@ if __name__ == "__main__":
   <div class="modal-handle"></div>
   <div class="modal-title" id="detail-title"></div>
   <div class="modal-sub" id="detail-sub"></div>
+  <div class="detail-tags">
+    <div class="dt-group">
+      <span class="dt-label">Type</span>
+      <div class="dt-btns" id="detail-cat-btns">
+        <button class="dt-btn" data-cat="f" onclick="setDetailCat('f')">📖 Fiction</button>
+        <button class="dt-btn" data-cat="n" onclick="setDetailCat('n')">📚 Non-fiction</button>
+      </div>
+    </div>
+    <div class="dt-group">
+      <span class="dt-label">Rating</span>
+      <div class="dt-btns" id="detail-rating-btns">
+        <button class="dt-btn r1" data-r="1" onclick="setDetailRating(1)">1 · Didn't like</button>
+        <button class="dt-btn r2" data-r="2" onclick="setDetailRating(2)">2 · Good</button>
+        <button class="dt-btn r3" data-r="3" onclick="setDetailRating(3)">3 · Excellent</button>
+      </div>
+    </div>
+  </div>
   <div class="stats-trio" id="detail-stats" style="margin-bottom:14px"></div>
   <div class="highlights" id="detail-highlights" style="margin-bottom:14px"></div>
   <div class="shelf-header" style="margin-bottom:10px">
@@ -531,6 +620,8 @@ let lastTick       = null;
 let lapTimeOpt     = 'timer';
 let editLapIdx     = null;
 let detailLaps      = null;
+let detailId        = null;
+let allChaptersOpen = false;
 
 // ── BOOT ──
 activeSessions = loadActive();
@@ -548,6 +639,19 @@ function saveHistory(h){
   try{localStorage.setItem('rp_history',JSON.stringify(h.slice(0,200)));}catch(e){}
 }
 function loadHistory(){ try{return JSON.parse(localStorage.getItem('rp_history')||'[]');}catch(e){return[];} }
+
+// Archive a finished book to history. Records the book's FULL word count
+// (every chapter, not just non-skipped laps) so the Stats charts can attribute
+// the whole book to the month it was finished. cat/rating carried if already set.
+function archiveToHistory(s){
+  const totalTime  = (s.totalBookElapsed||0)+s.sessionElapsed;
+  const totalWords = s.chapters.reduce((x,c)=>x+(c.wordCount||0),0);
+  const rec = { id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, totalWords:totalWords, finished:true };
+  if(s.cat)    rec.cat    = s.cat;
+  if(s.rating) rec.rating = s.rating;
+  const hist = loadHistory(); hist.unshift(rec); saveHistory(hist);
+  return rec;
+}
 
 // ── GOOGLE DRIVE SYNC ──
 // • Auto-loads from Drive on page open (when credentials stored)
@@ -956,6 +1060,7 @@ function openSession(id){
   s.status='running';
   s.lastOpenedAt=Date.now();
   saveActive(); renderShelf();
+  resetAllChapters();
   updateReadingUI(); rebuildLapsList();
   document.getElementById('tab-bar').style.display='none';
   showScreen('reading');
@@ -1050,9 +1155,7 @@ function recordLap(s,seconds){
   const isLast=s.chapterIdx>=s.chapters.length-1;
   if(isLast){
     s.status='done'; stopTimer();
-    const totalTime=(s.totalBookElapsed||0)+s.sessionElapsed;
-    const hist=loadHistory(); hist.unshift({ id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, finished:true });
-    saveHistory(hist);
+    archiveToHistory(s);
     activeSessions=activeSessions.filter(x=>x.id!==s.id);
     openSessionId=null; saveActive(); renderShelf(); driveAutoSave();
     showSummaryScreen(s);
@@ -1068,9 +1171,7 @@ function finishBook(){
   const s=getOpen(); if(!s) return;
   if(!confirm('Mark this book as finished? It will be removed from active books and saved to history.')) return;
   s.status='done'; stopTimer();
-  const totalTime=(s.totalBookElapsed||0)+s.sessionElapsed;
-  const hist=loadHistory(); hist.unshift({ id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, finished:true });
-  saveHistory(hist);
+  archiveToHistory(s);
   activeSessions=activeSessions.filter(x=>x.id!==s.id);
   openSessionId=null; saveActive(); renderShelf(); driveAutoSave();
   showSummaryScreen(s);
@@ -1088,9 +1189,7 @@ function skipChapter(){
   const isLast=s.chapterIdx>=s.chapters.length-1;
   if(isLast){
     s.status='done'; stopTimer();
-    const totalTime=(s.totalBookElapsed||0)+s.sessionElapsed;
-    const hist=loadHistory(); hist.unshift({ id:Date.now(), bookTitle:s.bookTitle, bookAuthor:s.bookAuthor, date:new Date().toISOString(), laps:[...s.laps], totalSeconds:totalTime, finished:true });
-    saveHistory(hist);
+    archiveToHistory(s);
     activeSessions=activeSessions.filter(x=>x.id!==s.id);
     openSessionId=null; saveActive(); renderShelf(); driveAutoSave();
     showSummaryScreen(s);
@@ -1194,6 +1293,7 @@ function updateReadingUI(){
   document.getElementById('pause-btn').textContent=s.status==='running'?'⏸ Pause':'▶ Resume';
   document.getElementById('timer-dot').className='dot'+(s.status==='running'?'':' paused');
   document.getElementById('timer-value').className='timer-value'+(s.status==='running'?'':' paused');
+  if(allChaptersOpen) rebuildAllChapters();
 }
 
 function updateTimerUI(){
@@ -1232,6 +1332,29 @@ function rebuildLapsList(){
   }).join('');
 }
 
+// ── ALL CHAPTERS (full list incl. unread — reading screen) ──
+function resetAllChapters(){
+  allChaptersOpen=false;
+  const c=document.getElementById('all-chapters-card'); if(c) c.style.display='none';
+  const t=document.getElementById('all-ch-toggle'); if(t) t.textContent='Show all';
+}
+function toggleAllChapters(){
+  allChaptersOpen=!allChaptersOpen;
+  document.getElementById('all-chapters-card').style.display=allChaptersOpen?'block':'none';
+  document.getElementById('all-ch-toggle').textContent=allChaptersOpen?'Hide':'Show all';
+  if(allChaptersOpen) rebuildAllChapters();
+}
+function rebuildAllChapters(){
+  const s=getOpen(); if(!s) return;
+  document.getElementById('all-chapters-body').innerHTML=s.chapters.map((c,i)=>{
+    let label,cls;
+    if(i<s.chapterIdx){ const sk=s.laps[i]&&s.laps[i].skipped; label=sk?'skipped':'done'; cls=sk?'next':'done'; }
+    else if(i===s.chapterIdx){ label='current'; cls='cur'; }
+    else { label='upcoming'; cls='next'; }
+    return `<div class="ch-row${i>s.chapterIdx?' upcoming':''}"><span class="row-name">${i+1}. ${esc(c.title)}</span><span class="row-time">${c.wordCount.toLocaleString()}</span><span style="text-align:right"><span class="ch-status ${cls}">${label}</span></span></div>`;
+  }).join('');
+}
+
 // ── SUMMARY ──
 function showSummaryScreen(s){
   const counted=s.laps.filter(l=>!l.skipped);
@@ -1264,14 +1387,96 @@ function renderHistory(){
   body.innerHTML=sessions.map(s=>{
     const hc=s.laps.filter(l=>!l.skipped), tw=hc.reduce((x,l)=>x+l.wordCount,0), tt=hc.reduce((x,l)=>x+l.seconds,0), avg=tt>0?Math.round((tw/tt)*60):0;
     const dt=new Date(s.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
-    return `<div class="session-item" onclick="openDetail(${s.id})"><div class="si-top"><div class="si-book">${esc(s.bookTitle)}</div><div class="si-wpm">${avg} WPM</div></div><div class="si-bottom"><span>📖 ${s.laps.length} ch</span><span>⏱ ${formatTime(s.totalSeconds)}</span><span>📝 ${tw.toLocaleString()} words</span><span>📅 ${dt}</span></div></div>`;
+    return `<div class="session-item" onclick="openDetail(${s.id})"><div class="si-top"><div class="si-book">${esc(s.bookTitle)}</div><div class="si-wpm">${avg} WPM</div></div><div class="si-bottom"><span>📖 ${s.laps.length} ch</span><span>⏱ ${formatTime(s.totalSeconds)}</span><span>📝 ${tw.toLocaleString()} words</span><span>📅 ${dt}</span>${s.cat==='f'?'<span>📖 Fiction</span>':s.cat==='n'?'<span>📚 Non-fiction</span>':''}${s.rating?`<span style="color:${ratingColor(s.rating)}">● ${s.rating}/3</span>`:''}</div></div>`;
   }).join('');
 }
 
 function clearHistory(){ if(confirm('Clear all history?')){ saveHistory([]); renderHistory(); } }
 
+// ── STATS ──
+let statsRangeMonths = 6;
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function setStatsRange(m){
+  statsRangeMonths = m;
+  document.querySelectorAll('#stats-range .range-btn').forEach(b=>b.classList.toggle('active', +b.dataset.range===m));
+  renderStats();
+}
+function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function monthLabel(k){ const p=k.split('-'); return MONTH_ABBR[+p[1]-1]+" '"+p[0].slice(2); }
+function bookWords(r){ return r.totalWords!=null ? r.totalWords : r.laps.filter(l=>!l.skipped).reduce((x,l)=>x+(l.wordCount||0),0); }
+function fmtWords(n){ return n>=1000 ? (n/1000).toFixed(n>=9500?0:1).replace(/\.0$/,'')+'k' : String(n); }
+function legendItem(c,lbl){ return `<span class="legend-item"><span class="legend-dot" style="background:${c}"></span>${lbl}</span>`; }
+function statBox(v,l){ return `<div class="stat-box"><div class="stat-val">${v}</div><div class="stat-lbl">${l}</div></div>`; }
+
+function renderStats(){
+  const hist    = loadHistory().filter(r=>r.finished!==false);
+  const content = document.getElementById('stats-content');
+  const empty   = document.getElementById('stats-empty');
+  if(!hist.length){
+    content.style.display='none'; empty.style.display='block';
+    empty.innerHTML='<div class="empty-icon">📊</div><div class="empty-text">No finished books yet</div><div class="empty-sub">Finish a book to see your monthly stats</div>';
+    return;
+  }
+  content.style.display='block'; empty.style.display='none';
+
+  // Build the list of month buckets to display
+  const now = new Date();
+  let months = [];
+  if(statsRangeMonths > 0){
+    for(let i=statsRangeMonths-1; i>=0; i--) months.push(monthKey(new Date(now.getFullYear(), now.getMonth()-i, 1)));
+  } else {
+    const first = hist.map(r=>monthKey(new Date(r.date))).sort()[0];
+    let cur = new Date(+first.split('-')[0], +first.split('-')[1]-1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 1);
+    while(cur <= end){ months.push(monthKey(cur)); cur = new Date(cur.getFullYear(), cur.getMonth()+1, 1); }
+  }
+  const inRange = new Set(months);
+
+  const agg = {}; months.forEach(k => agg[k] = { f:{n:0,w:0}, n:{n:0,w:0}, u:{n:0,w:0} });
+  const tot = { books:0, words:0, f:0, n:0, r:[0,0,0,0] };
+  hist.forEach(r => {
+    const k = monthKey(new Date(r.date));
+    if(!inRange.has(k)) return;
+    const w = bookWords(r);
+    const bucket = r.cat==='f' ? 'f' : r.cat==='n' ? 'n' : 'u';
+    agg[k][bucket].n++; agg[k][bucket].w += w;
+    tot.books++; tot.words += w;
+    if(r.cat==='f') tot.f++; else if(r.cat==='n') tot.n++;
+    if(r.rating>=1 && r.rating<=3) tot.r[r.rating]++;
+  });
+
+  const maxBooks = Math.max(1, ...months.map(k => agg[k].f.n+agg[k].n.n+agg[k].u.n));
+  const maxWords = Math.max(1, ...months.map(k => agg[k].f.w+agg[k].n.w+agg[k].u.w));
+  document.getElementById('chart-books').innerHTML = months.map(k => statCol(k, agg[k], maxBooks, 'n', String)).join('');
+  document.getElementById('chart-words').innerHTML = months.map(k => statCol(k, agg[k], maxWords, 'w', fmtWords)).join('');
+  document.getElementById('stats-legend').innerHTML =
+    legendItem('var(--blue)','Fiction') + legendItem('var(--gold)','Non-fiction') + legendItem('var(--muted)','Untagged');
+
+  const rmax = Math.max(1, tot.r[1], tot.r[2], tot.r[3]);
+  document.getElementById('ratings-card').innerHTML = [
+    [1,"1 · Didn't like",'var(--red)'], [2,'2 · Good','var(--gold)'], [3,'3 · Excellent','var(--green)']
+  ].map(([n,lbl,c]) =>
+    `<div class="rating-row"><span class="rating-lbl">${lbl}</span><div class="rating-bar-track"><div class="rating-bar" style="width:${tot.r[n]/rmax*100}%;background:${c}"></div></div><span class="rating-count">${tot.r[n]}</span></div>`
+  ).join('');
+
+  document.getElementById('stats-totals').innerHTML =
+    statBox(tot.books,'Books') + statBox(fmtWords(tot.words),'Words') + statBox(tot.f+' / '+tot.n,'Fic / Non');
+}
+
+function statCol(k, a, max, key, fmt){
+  const total = a.f[key] + a.n[key] + a.u[key];
+  const hPx = total>0 ? Math.max(3, Math.round(total/max*140)) : 0;
+  const seg = (v,c) => v>0 ? `<div class="chart-seg" style="height:${(v/total*100).toFixed(2)}%;background:${c}"></div>` : '';
+  return `<div class="chart-col">
+    <span class="chart-val">${total>0 ? fmt(total) : ''}</span>
+    <div class="chart-stack" style="height:${hPx}px">${seg(a.u[key],'var(--muted)')}${seg(a.n[key],'var(--gold)')}${seg(a.f[key],'var(--blue)')}</div>
+    <span class="chart-mlabel">${monthLabel(k)}</span>
+  </div>`;
+}
+
 function openDetail(id){
   const s=loadHistory().find(x=>x.id===id); if(!s) return;
+  detailId=id;
   const counted2=s.laps.filter(l=>!l.skipped);
   const tw=counted2.reduce((x,l)=>x+l.wordCount,0), tt=counted2.reduce((x,l)=>x+l.seconds,0), avg=tt>0?Math.round((tw/tt)*60):0;
   const dt=new Date(s.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
@@ -1289,9 +1494,24 @@ function openDetail(id){
     return `<div class="table-row" style="cursor:default"><span class="row-name">${esc(l.title)}</span><span class="row-time">${formatTime(l.seconds)}</span><span class="row-wpm" style="color:${c}">${Math.round(l.wpm)}</span></div>`;
   }).join('');
   detailLaps=s.laps;
+  renderDetailTags(s);
   document.getElementById('detail-modal').classList.add('open');
 }
 function closeDetailModal(e){ if(e&&e.target!==document.getElementById('detail-modal')) return; document.getElementById('detail-modal').classList.remove('open'); }
+
+// ── DETAIL: fiction/non-fiction + rating (edits the history record in place) ──
+function renderDetailTags(r){
+  document.querySelectorAll('#detail-cat-btns .dt-btn').forEach(b=>b.classList.toggle('active', b.dataset.cat===r.cat));
+  document.querySelectorAll('#detail-rating-btns .dt-btn').forEach(b=>b.classList.toggle('active', +b.dataset.r===r.rating));
+}
+function updateDetailRecord(fn){
+  const h=loadHistory(), r=h.find(x=>x.id===detailId); if(!r) return;
+  fn(r);
+  saveHistory(h); renderDetailTags(r); renderHistory(); driveAutoSave();
+}
+function setDetailCat(c){ updateDetailRecord(r => { if(r.cat===c) delete r.cat; else r.cat=c; }); }
+function setDetailRating(n){ updateDetailRecord(r => { if(r.rating===n) delete r.rating; else r.rating=n; }); }
+function ratingColor(n){ return n===1 ? 'var(--red)' : n===3 ? 'var(--green)' : 'var(--gold)'; }
 
 // ── EXPORT CHAPTER TIMES (copy-paste into the personal Excel tracker's Minutes/Seconds columns) ──
 function exportReadingTimes(){ const s=getOpen(); if(s) openExportModal(s.laps); }
@@ -1348,7 +1568,7 @@ async function parseEpub(file){
 
 // ── NAVIGATION ──
 function showScreen(n){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('screen-'+n).classList.add('active'); }
-function switchTab(t){ document.getElementById('tab-read').className='tab'+(t==='home'?' active':''); document.getElementById('tab-history').className='tab'+(t==='history'?' active':''); if(t==='history') renderHistory(); showScreen(t); }
+function switchTab(t){ document.getElementById('tab-read').className='tab'+(t==='home'?' active':''); document.getElementById('tab-stats').className='tab'+(t==='stats'?' active':''); document.getElementById('tab-history').className='tab'+(t==='history'?' active':''); if(t==='history') renderHistory(); if(t==='stats') renderStats(); showScreen(t); }
 
 // ── A2HS ──
 function dismissA2HS(){ document.getElementById('a2hs-banner').classList.add('hidden'); try{localStorage.setItem('rp_a2hs','1');}catch(e){} }
