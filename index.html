@@ -510,7 +510,7 @@ if __name__ == "__main__":
     </div>
   </div>
   <div id="manual-entry" style="display:none">
-    <input type="text" class="time-input" id="manual-time-input" placeholder="m:ss  or  h:mm:ss" inputmode="decimal">
+    <input type="text" class="time-input" id="manual-time-input" placeholder="m.ss  or  h.mm.ss" inputmode="decimal">
     <div class="time-input-hint">e.g. 25:30 for 25 min 30 sec · or 1:02:15 for over an hour</div>
   </div>
   <div class="btn-row">
@@ -530,7 +530,7 @@ if __name__ == "__main__":
   <!-- Option A: fix the time -->
   <div style="margin-bottom:18px">
     <div class="section-label">Fix the recorded time</div>
-    <input type="text" class="time-input" id="edit-time-input" placeholder="m:ss  or  h:mm:ss" inputmode="decimal">
+    <input type="text" class="time-input" id="edit-time-input" placeholder="m.ss  or  h.mm.ss" inputmode="decimal">
     <div class="time-input-hint">WPM recalculates automatically · other chapters unaffected</div>
     <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="confirmEdit()">Save New Time</button>
   </div>
@@ -1579,7 +1579,8 @@ function getOpen(){ return activeSessions.find(s=>s.id===openSessionId)||null; }
 function formatTime(s){ const t=Math.floor(s); if(t<3600) return `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`; return `${Math.floor(t/3600)}h ${Math.floor((t%3600)/60)}m`; }
 function parseTime(str){
   if(!str||!str.trim()) return null;
-  const p=str.trim().split(':');
+  // phone numeric keypads lack ':', so accept '.', ',' or spaces as separators too (e.g. 5.30 → 5:30)
+  const p=str.trim().replace(/(\d+)\s*h\s*(\d+)\s*m/i,'$1:$2:00').replace(/[.,\s]+/g,':').split(':');
   try{
     if(p.length===1){ const n=parseFloat(p[0]); return isNaN(n)||n<=0?null:n; }
     if(p.length===2){ const m=parseInt(p[0]),s=parseFloat(p[1]); if(isNaN(m)||isNaN(s)||s>=60) return null; return m*60+s; }
